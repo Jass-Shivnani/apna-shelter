@@ -1,88 +1,136 @@
 import React from 'react';
 import styled from 'styled-components';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
 
 const Section = styled.section`
   padding: 4rem 5%;
-  background-color: #003366;
-  color: white;
 `;
 
-const Title = styled.h2`
-  text-align: center;
-  font-size: 2.5rem;
-  margin-bottom: 3rem;
-`;
-
-const StatsContainer = styled.div`
+const Card = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2rem;
-  margin-bottom: 3rem;
-  text-align: center;
-`;
-
-const StatBox = styled.div`
-  padding: 2rem;
-`;
-
-const StatNumber = styled.div`
-  font-size: 2.5rem;
-  font-weight: bold;
-  color: #ff6b00;
-  margin-bottom: 0.5rem;
-`;
-
-const StatLabel = styled.div`
-  color: #ffffff;
-  font-size: 1.1rem;
-`;
-
-const MapWrapper = styled.div`
-  height: 400px;
-  width: 100%;
-  border-radius: 8px;
+  grid-template-columns: 1fr 1fr;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  
-  .leaflet-container {
-    height: 100%;
+`;
+
+const LeftSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  background-color: white;
+`;
+
+const MapContainer = styled.div`
+  line-height: 0;
+  img {
     width: 100%;
+    display: block;
   }
 `;
 
-const ImpactMap = () => {
-  const stats = [
-    { number: '262,738,798', label: 'meals served' },
-    { number: '1,780,655', label: 'supporters' },
-    { number: '127', label: 'NGOs' }
-  ];
+const StatsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  padding: 2rem;
+`;
 
+const StatItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+`;
+
+const StatMain = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+`;
+
+const StatNumber = styled.span`
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: #003669;
+  line-height: 1;
+`;
+
+const StatLabel = styled.span`
+  font-size: 1rem;
+  color: #666;
+`;
+
+const GreenText = styled.span`
+  color: #4CAF50;
+  font-size: 0.875rem;
+  text-align: right;
+  white-space: nowrap;
+  margin-top: 0.5rem;
+`;
+
+const Content = styled.div`
+  padding: 3rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background-color: #003669;
+  height: 100%;
+`;
+
+const Title = styled.h2`
+  font-size: 2.5rem;
+  color: white;
+  margin-bottom: 1.5rem;
+  font-weight: bold;
+  font-family: 'Roboto', sans-serif;
+`;
+
+const Description = styled.p`
+  color: white;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+  font-weight: 200;
+`;
+
+const ImpactMap = () => {
   return (
     <Section>
-      <Title>Our Impact to date</Title>
-      <StatsContainer>
-        {stats.map((stat, index) => (
-          <StatBox key={index}>
-            <StatNumber>{stat.number}</StatNumber>
-            <StatLabel>{stat.label}</StatLabel>
-          </StatBox>
-        ))}
-      </StatsContainer>
-      <MapWrapper>
-        <MapContainer
-          center={[20.5937, 78.9629]} // Center of India
-          zoom={5}
-          scrollWheelZoom={false}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          />
-          {/* Add markers for impact locations */}
-        </MapContainer>
-      </MapWrapper>
+      <Card>
+        <LeftSection>
+          <MapContainer>
+            <img src="/images/Mumbai.png" alt="Impact distribution map" />
+          </MapContainer>
+          <StatsContainer>
+            <StatItem>
+              <StatMain>
+                <StatNumber>262,738,798 meals</StatNumber>
+                <StatLabel>shared</StatLabel>
+              </StatMain>
+              <GreenText>+ 361,635<br />in the last day</GreenText>
+            </StatItem>
+            <StatItem>
+              <StatMain>
+                <StatNumber>1,789,655</StatNumber>
+                <StatLabel>fighting hunger</StatLabel>
+              </StatMain>
+              <GreenText>+ 17,154<br />in the last day</GreenText>
+            </StatItem>
+            <StatItem>
+              <StatMain>
+                <StatNumber>127</StatNumber>
+                <StatLabel>goals</StatLabel>
+              </StatMain>
+              <GreenText>+ 1<br />in the last 90 days</GreenText>
+            </StatItem>
+          </StatsContainer>
+        </LeftSection>
+        <Content>
+          <Title>Our impact to date</Title>
+          <Description>
+            ShareTheMeal donations not only provide life-saving food in emergencies but also facilitate school feeding, nutrition support, cash transfers and resilience programmes all over the world.
+          </Description>
+        </Content>
+      </Card>
     </Section>
   );
 };

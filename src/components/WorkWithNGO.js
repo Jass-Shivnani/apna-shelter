@@ -8,29 +8,26 @@ const Section = styled.section`
 `;
 
 const Title = styled.h2`
-  font-size: 2.5rem;
-  color: #333;
+  font-size: 6.5rem;
+  font-family: 'Roboto', sans-serif;
+  color: #344767;
   margin-bottom: 2rem;
 `;
 
 const Description = styled.p`
-  color: #666;
+  color: #344767;
+  font-family: 'Roboto', sans-serif;
+  font-size: 1.2rem;
   max-width: 800px;
   margin: 0 auto 3rem;
   line-height: 1.6;
 `;
 
-const JoinButton = styled.button`
-  background-color: #ff6b00;
-  color: white;
-  border: none;
-  padding: 1rem 3rem;
-  font-size: 1.1rem;
-  border-radius: 4px;
-  cursor: pointer;
-  &:hover {
-    background-color: #e65c00;
-  }
+const Quote = styled.span`
+  font-family: 'Europa Grotesk SH', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #344767;
 `;
 
 const WorkWithNGO = () => {
@@ -38,10 +35,8 @@ const WorkWithNGO = () => {
     <Section>
       <Title>Work with our NGO</Title>
       <Description>
-        We're constantly trying to express ourselves and actualize our dreams. If you have the 
-        opportunity to play this game called life, you need to appreciate every moment.
+        <Quote>"</Quote>The best way to find yourself is to lose yourself in the service of others<Quote>"</Quote>
       </Description>
-      <JoinButton>Join Us</JoinButton>
     </Section>
   );
 };

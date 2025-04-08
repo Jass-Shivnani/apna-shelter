@@ -1,4 +1,6 @@
 import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import styled, { createGlobalStyle } from 'styled-components';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import DonationImpact from './components/DonationImpact';
@@ -6,7 +8,7 @@ import UrgentNeed from './components/UrgentNeed';
 import ImpactMap from './components/ImpactMap';
 import WorkWithNGO from './components/WorkWithNGO';
 import Footer from './components/Footer';
-import { createGlobalStyle } from 'styled-components';
+import DonationForm from './pages/DonationForm';
 
 const GlobalStyle = createGlobalStyle`
   * {
@@ -24,18 +26,27 @@ const GlobalStyle = createGlobalStyle`
   }
 `;
 
+const HomePage = () => (
+  <>
+    <Navbar />
+    <Hero />
+    <DonationImpact />
+    <UrgentNeed />
+    <ImpactMap />
+    <WorkWithNGO />
+    <Footer />
+  </>
+);
+
 function App() {
   return (
-    <>
+    <Router>
       <GlobalStyle />
-      <Navbar />
-      <Hero />
-      <DonationImpact />
-      <UrgentNeed />
-      <ImpactMap />
-      <WorkWithNGO />
-      <Footer />
-    </>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/donate" element={<DonationForm />} />
+      </Routes>
+    </Router>
   );
 }
 

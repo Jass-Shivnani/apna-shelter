@@ -1,5 +1,6 @@
 import React from 'react';
 import styled, { keyframes } from 'styled-components';
+import { Link } from 'react-router-dom';
 
 const scroll = keyframes`
   0% {
@@ -26,6 +27,9 @@ const ScrollingText = styled.div`
 `;
 
 const Nav = styled.nav`
+  position: sticky;
+  top: 0;
+  z-index: 1000;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -59,18 +63,17 @@ const NavLink = styled.a`
   }
 `;
 
-const DonateButton = styled.button`
-  background-color: #E85D04;
+const DonateButton = styled(Link)`
+  background-color: #ff6b00;
   color: white;
-  border: none;
-  padding: 1rem 1.5rem;
+  padding: 0.5rem 1.5rem;
   border-radius: 4px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 16px;
-  font-family: 'Roboto', sans-serif;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.3s ease;
+
   &:hover {
-    background-color: #d04d1a;
+    background-color: #e65c00;
   }
 `;
 
@@ -87,9 +90,8 @@ const Navbar = () => {
           <img src="/images/logo.png" alt="APNA SHELTER INDIA FOUNDATION - A NEW HOPE FOR NEW FUTURE" />
         </Logo>
         <NavLinks>
-          <NavLink href="#">Why donate?</NavLink>
-          <NavLink href="#">Return to Home</NavLink>
-          <DonateButton>Donate Now</DonateButton>
+          <NavLink as={Link} to="/">Return to Home</NavLink>
+          <DonateButton to="/donate">Donate Now</DonateButton>
         </NavLinks>
       </Nav>
     </>
