@@ -9,6 +9,9 @@ import ImpactMap from './components/ImpactMap';
 import WorkWithNGO from './components/WorkWithNGO';
 import Footer from './components/Footer';
 import DonationForm from './pages/DonationForm';
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 
 const GlobalStyle = createGlobalStyle`
   * {
@@ -26,8 +29,12 @@ const GlobalStyle = createGlobalStyle`
   }
 `;
 
+const HomePageWrapper = styled.div`
+  background-color: #FFF4E0;
+`;
+
 const HomePage = () => (
-  <>
+  <HomePageWrapper>
     <Navbar />
     <Hero />
     <DonationImpact />
@@ -35,7 +42,7 @@ const HomePage = () => (
     <ImpactMap />
     <WorkWithNGO />
     <Footer />
-  </>
+  </HomePageWrapper>
 );
 
 function App() {
@@ -45,6 +52,12 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/donate" element={<DonationForm />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/dashboard" element={
+          <ProtectedRoute>
+            <AdminDashboard />
+          </ProtectedRoute>
+        } />
       </Routes>
     </Router>
   );

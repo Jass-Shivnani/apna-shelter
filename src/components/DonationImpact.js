@@ -3,7 +3,7 @@ import styled from 'styled-components';
 
 const Section = styled.section`
   padding: 4rem 5%;
-  background-color: #f9f9f9;
+  background-color: #FFF4E0;
   text-align: left;
 `;
 

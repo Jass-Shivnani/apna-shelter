@@ -34,7 +34,7 @@ const Nav = styled.nav`
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 2.5%;
-  background-color: #fff;
+  background-color: #FFF4E0 ;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   font-family: 'Roboto', sans-serif;
 `;
@@ -90,7 +90,7 @@ const Navbar = () => {
           <img src="/images/logo.png" alt="APNA SHELTER INDIA FOUNDATION - A NEW HOPE FOR NEW FUTURE" />
         </Logo>
         <NavLinks>
-          <NavLink as={Link} to="/">Return to Home</NavLink>
+          <NavLink as={Link} to="/">"Return to Home"</NavLink>
           <DonateButton to="/donate">Donate Now</DonateButton>
         </NavLinks>
       </Nav>

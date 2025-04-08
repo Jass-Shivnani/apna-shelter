@@ -818,7 +818,7 @@ const DonationForm = () => {
       }
       
       if (!formData.items.trim()) {
-        newErrors.items = 'Please describe the items you wish to donate';
+        newErrors.items = 'Please describe the food you wish to donate';
       }
     } else if (deliveryMethod === 'drop') {
       if (!formData.selectedDropLocation) {
@@ -826,7 +826,7 @@ const DonationForm = () => {
       }
       
       if (!formData.items.trim()) {
-        newErrors.items = 'Please describe the items you wish to donate';
+        newErrors.items = 'Please describe the food you wish to donate';
       }
     }
     
@@ -996,7 +996,7 @@ const DonationForm = () => {
                         </svg>
                       </UploadIcon>
                       <UploadText>
-                        {photoPreview ? 'Change photo' : 'Upload a photo of the items you wish to donate'}
+                        {photoPreview ? 'Change photo' : 'Upload a photo of the food you wish to donate'}
                         <br />
                         <small>Click to browse or drag and drop</small>
                       </UploadText>
@@ -1122,12 +1122,12 @@ const DonationForm = () => {
                     </InputGroup>
                     
                     <InputGroup>
-                      <Label>Items to Donate</Label>
+                      <Label>Food Description</Label>
                       <TextArea
                         name="items"
                         value={formData.items}
                         onChange={handleInputChange}
-                        placeholder="Describe the items you wish to donate (e.g., clothes, books, toys, etc.)"
+                        placeholder="Describe the food you wish to donate (e.g., rice, dal, vegetables, etc.)"
                       />
                       {errors.items && <ErrorMessage>{errors.items}</ErrorMessage>}
                     </InputGroup>
@@ -1199,12 +1199,12 @@ const DonationForm = () => {
                     </InputGroup>
                     
                     <InputGroup>
-                      <Label>Items to Donate</Label>
+                      <Label>Food Description</Label>
                       <TextArea
                         name="items"
                         value={formData.items}
                         onChange={handleInputChange}
-                        placeholder="Describe the items you wish to donate (e.g., clothes, books, toys, etc.)"
+                        placeholder="Describe the food you wish to donate (e.g., rice, dal, vegetables, etc.)"
                       />
                       {errors.items && <ErrorMessage>{errors.items}</ErrorMessage>}
                     </InputGroup>
