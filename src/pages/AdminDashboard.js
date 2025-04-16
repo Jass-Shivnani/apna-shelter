@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import Navbar from '../components/Navbar';
+import { donationService } from '../services/api';
+import { FaBoxOpen, FaCheckCircle, FaTimesCircle, FaSpinner, FaSearch, FaDirections, FaMapMarkedAlt, FaUsers, FaSignOutAlt } from 'react-icons/fa';
 
 const PageWrapper = styled.div`
   min-height: 100vh;
@@ -25,6 +27,25 @@ const Title = styled.h1`
   font-size: 2rem;
   color: #344767;
   font-family: 'Roboto', sans-serif;
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 1rem;
+`;
+
+const ActionLink = styled.button`
+  padding: 0.6rem 1.2rem;
+  background-color: #007DBC;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    background-color: #0069a3;
+  }
 `;
 
 const LogoutButton = styled.button`
@@ -104,9 +125,9 @@ const StatusBadge = styled.span`
   background-color: ${props => {
     switch(props.status) {
       case 'pending': return '#FFF3CD';
-      case 'approved': return '#D1E7DD';
+      case 'confirmed': return '#D1E7DD';
       case 'completed': return '#CFF4FC';
-      case 'rejected': return '#F8D7DA';
+      case 'cancelled': return '#F8D7DA';
       default: return '#E2E3E5';
     }
   }};
@@ -114,9 +135,9 @@ const StatusBadge = styled.span`
   color: ${props => {
     switch(props.status) {
       case 'pending': return '#856404';
-      case 'approved': return '#0F5132';
+      case 'confirmed': return '#0F5132';
       case 'completed': return '#055160';
-      case 'rejected': return '#842029';
+      case 'cancelled': return '#842029';
       default: return '#41464B';
     }
   }};
@@ -136,6 +157,7 @@ const ActionButton = styled.button`
       case 'approve': return '#D1E7DD';
       case 'reject': return '#F8D7DA';
       case 'complete': return '#CFF4FC';
+      case 'accept': return '#28A745';
       default: return '#E2E3E5';
     }
   }};
@@ -146,6 +168,7 @@ const ActionButton = styled.button`
       case 'approve': return '#0F5132';
       case 'reject': return '#842029';
       case 'complete': return '#055160';
+      case 'accept': return '#fff';
       default: return '#41464B';
     }
   }};
@@ -156,6 +179,7 @@ const ActionButton = styled.button`
       case 'approve': return '#A3CFBB';
       case 'reject': return '#F1AEB5';
       case 'complete': return '#9EEAF9';
+      case 'accept': return '#28A745';
       default: return '#D6D8DB';
     }
   }};
@@ -171,35 +195,111 @@ const EmptyState = styled.div`
   color: #6c757d;
 `;
 
+const DashboardStats = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+`;
+
+const StatCard = styled.div`
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  
+  svg {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: ${props => props.color || '#007DBC'};
+  }
+`;
+
+const StatValue = styled.div`
+  font-size: 2rem;
+  font-weight: bold;
+  color: #344767;
+  margin-bottom: 0.5rem;
+`;
+
+const StatLabel = styled.div`
+  color: #6c757d;
+  font-size: 0.9rem;
+`;
+
+const LoadingOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  
+  svg {
+    color: #007DBC;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
 const SearchContainer = styled.div`
   margin-bottom: 1.5rem;
   display: flex;
   gap: 1rem;
+  position: relative;
+  
+  svg {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6c757d;
+  }
 `;
 
 const SearchInput = styled.input`
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 1rem 0.6rem 2.5rem;
   border: 1px solid #ddd;
   border-radius: 4px;
-  font-size: 1rem;
   flex: 1;
+  font-size: 1rem;
   
   &:focus {
     outline: none;
     border-color: #007DBC;
+    box-shadow: 0 0 0 2px rgba(0, 125, 188, 0.2);
   }
 `;
 
 const FilterSelect = styled.select`
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 2.5rem 0.6rem 1rem;
   border: 1px solid #ddd;
   border-radius: 4px;
-  font-size: 1rem;
   background-color: white;
+  font-size: 1rem;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1em;
   
   &:focus {
     outline: none;
     border-color: #007DBC;
+    box-shadow: 0 0 0 2px rgba(0, 125, 188, 0.2);
   }
 `;
 
@@ -210,7 +310,7 @@ const Pagination = styled.div`
   gap: 0.5rem;
 `;
 
-const PageButton = styled.button`
+const PaginationButton = styled.button`
   padding: 0.5rem 0.75rem;
   border: 1px solid #dee2e6;
   background-color: ${props => props.active ? '#007DBC' : 'white'};
@@ -226,6 +326,10 @@ const PageButton = styled.button`
     cursor: not-allowed;
     opacity: 0.5;
   }
+`;
+
+const PageInfo = styled.span`
+  margin: 0 1rem;
 `;
 
 const ModalOverlay = styled.div`
@@ -295,19 +399,6 @@ const DetailValue = styled.p`
   color: #212529;
 `;
 
-const ImagePreview = styled.img`
-  max-width: 100%;
-  border-radius: 4px;
-  margin-top: 0.5rem;
-`;
-
-const MapContainer = styled.div`
-  height: 300px;
-  margin-top: 0.5rem;
-  border-radius: 4px;
-  overflow: hidden;
-`;
-
 const ModalFooter = styled.div`
   padding: 1rem;
   border-top: 1px solid #dee2e6;
@@ -316,441 +407,733 @@ const ModalFooter = styled.div`
   gap: 0.5rem;
 `;
 
-// Mock data for demonstration
-const mockDonations = [
-  {
-    id: '123456',
-    fullName: 'Rahul Sharma',
-    contactNumber: '9876543210',
-    date: '2025-04-02',
-    items: 'Rice, dal, and vegetables for 5 people',
-    deliveryMethod: 'pickup',
-    status: 'pending',
-    address: '123 Main Street, Mumbai',
-    pinCode: '400001',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    photoVerification: '/images/mock-donation.jpg',
-    notes: 'Available for pickup on weekends'
-  },
-  {
-    id: '123457',
-    fullName: 'Priya Patel',
-    contactNumber: '9876543211',
-    date: '2025-04-01',
-    items: 'Homemade chapatis and curry for 10 people',
-    deliveryMethod: 'drop',
-    status: 'approved',
-    selectedDropLocation: {
-      name: 'Apna Shelter Main Center',
-      address: '123 Charity Road, Mumbai',
-      timings: '10:00 AM - 6:00 PM'
-    },
-    pinCode: '400002',
-    photoVerification: '/images/mock-donation2.jpg'
-  },
-  {
-    id: '123458',
-    fullName: 'Amit Kumar',
-    contactNumber: '9876543212',
-    date: '2025-03-30',
-    items: 'Packed meals with rice, dal, and sabzi for 8 people',
-    deliveryMethod: 'pickup',
-    status: 'completed',
-    address: '456 Park Avenue, Delhi',
-    pinCode: '110001',
-    city: 'Delhi',
-    state: 'Delhi',
-    photoVerification: '/images/mock-donation3.jpg'
-  },
-  {
-    id: '123459',
-    fullName: 'Sneha Gupta',
-    contactNumber: '9876543213',
-    date: '2025-03-29',
-    items: 'Bread, fruits, and dry snacks for 15 people',
-    deliveryMethod: 'drop',
-    status: 'rejected',
-    selectedDropLocation: {
-      name: 'Apna Shelter South Center',
-      address: '456 Hope Street, Mumbai',
-      timings: '9:00 AM - 5:00 PM'
-    },
-    pinCode: '400003',
-    photoVerification: '/images/mock-donation4.jpg',
-    notes: 'Food items are past expiration date'
+const MapPreview = styled.div`
+  width: 100%;
+  height: 200px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 1rem;
+  position: relative;
+  border: 1px solid #dee2e6;
+`;
+
+const DirectionsButton = styled.a`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #4285F4;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  
+  &:hover {
+    background-color: #3367D6;
   }
-];
+`;
+
+const Toast = styled.div`
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: ${props => props.success ? '#28a745' : '#dc3545'};
+  color: #fff;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  z-index: 9999;
+  font-size: 1rem;
+`;
+
+const CardHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+  background-color: #f8f9fa;
+  
+  h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #343a40;
+  }
+  
+  p {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+    color: #6c757d;
+  }
+`;
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
   const [donations, setDonations] = useState([]);
   const [filteredDonations, setFilteredDonations] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [selectedDonation, setSelectedDonation] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const itemsPerPage = 10;
-  const navigate = useNavigate();
+  const [selectedDonation, setSelectedDonation] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    confirmed: 0,
+    completed: 0,
+    cancelled: 0
+  });
+  const [currentUser, setCurrentUser] = useState(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
 
-  // Check if admin is authenticated
   useEffect(() => {
-    const isAuthenticated = localStorage.getItem('adminAuthenticated') === 'true';
-    if (!isAuthenticated) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
       navigate('/admin/login');
+      return;
     }
+    
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+    setCurrentUser(user);
+    
+    console.log('Current user:', user);
   }, [navigate]);
 
-  // Load donations data
   useEffect(() => {
-    // In a real app, this would be an API call to fetch donations
-    // For demo purposes, we'll use our mock data
-    setDonations(mockDonations);
+    const fetchDonations = async () => {
+      setLoading(true);
+      try {
+        const response = await donationService.getAllDonations();
+        if (response.success) {
+          let allDonations = response.data;
+          let filteredDonations = allDonations;
+          const user = JSON.parse(localStorage.getItem('currentUser'));
+          if (user) {
+            if (user.role === 'manager' && user.associatedNgo) {
+              filteredDonations = allDonations.filter(donation => {
+                if (donation.donationType === 'drop-off') {
+                  return donation.dropLocationId === user.associatedNgo.id;
+                }
+                if (donation.donationType === 'pickup') {
+                  return (
+                    (donation.city && user.associatedNgo.city && donation.city.toLowerCase() === user.associatedNgo.city.toLowerCase()) ||
+                    (donation.state && user.associatedNgo.state && donation.state.toLowerCase() === user.associatedNgo.state.toLowerCase()) ||
+                    (donation.pinCode && user.associatedNgo.pinCode && donation.pinCode === user.associatedNgo.pinCode)
+                  );
+                }
+                return false;
+              });
+            } else if (user.role === 'volunteer') {
+              filteredDonations = allDonations.filter(donation => {
+                if (donation.status !== 'confirmed' || donation.donationType !== 'pickup' || donation.pickupAgent) {
+                  return false;
+                }
+                if (user.serviceAreas && user.serviceAreas.length > 0) {
+                  return user.serviceAreas.some(area => {
+                    return (
+                      (donation.city && area.city && donation.city.toLowerCase() === area.city.toLowerCase()) ||
+                      (donation.state && area.state && donation.state.toLowerCase() === area.state.toLowerCase()) ||
+                      (donation.pinCode && area.pinCode && donation.pinCode === area.pinCode)
+                    );
+                  });
+                }
+                if (user.selectedNgos && user.selectedNgos.length > 0) {
+                  return user.selectedNgos.some(ngo => {
+                    return (
+                      (donation.city && ngo.city && donation.city.toLowerCase() === ngo.city.toLowerCase()) ||
+                      (donation.state && ngo.state && donation.state.toLowerCase() === ngo.state.toLowerCase()) ||
+                      (donation.pinCode && ngo.pinCode && donation.pinCode === ngo.pinCode)
+                    );
+                  });
+                }
+                return true;
+              });
+            }
+          }
+          setDonations(filteredDonations);
+          const stats = {
+            total: filteredDonations.length,
+            pending: filteredDonations.filter(d => d.status === 'pending').length,
+            confirmed: filteredDonations.filter(d => d.status === 'confirmed').length,
+            completed: filteredDonations.filter(d => d.status === 'completed').length,
+            cancelled: filteredDonations.filter(d => d.status === 'cancelled').length
+          };
+          setStats(stats);
+        }
+      } catch (error) {
+        console.error('Error fetching donations:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchDonations();
   }, []);
 
-  // Filter donations based on active tab, search term, and status filter
   useEffect(() => {
     let filtered = [...donations];
     
-    // Filter by tab
     if (activeTab !== 'all') {
-      filtered = filtered.filter(donation => donation.deliveryMethod === activeTab);
+      filtered = filtered.filter(donation => donation.status === activeTab);
     }
     
-    // Filter by status
+    if (searchTerm) {
+      filtered = filtered.filter(donation => 
+        donation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        donation._id.includes(searchTerm) ||
+        donation.phone.includes(searchTerm) ||
+        donation.email.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
     if (statusFilter !== 'all') {
       filtered = filtered.filter(donation => donation.status === statusFilter);
     }
     
-    // Filter by search term
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(donation => 
-        donation.fullName.toLowerCase().includes(term) ||
-        donation.id.includes(term) ||
-        donation.pinCode.includes(term) ||
-        donation.contactNumber.includes(term)
-      );
-    }
+    filtered = filtered.map((donation, index) => ({
+      ...donation,
+      displayId: index + 1
+    }));
     
     setFilteredDonations(filtered);
-    setCurrentPage(1); // Reset to first page when filters change
+    setCurrentPage(1); 
   }, [activeTab, donations, searchTerm, statusFilter]);
 
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredDonations.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredDonations.length / itemsPerPage);
+  
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+  
   const handleLogout = () => {
-    localStorage.removeItem('adminAuthenticated');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userRole');
     navigate('/admin/login');
   };
-
+  
   const handleViewDonation = (donation) => {
     setSelectedDonation(donation);
     setShowModal(true);
   };
-
-  const handleStatusChange = (donationId, newStatus) => {
-    // In a real app, this would be an API call to update the donation status
-    const updatedDonations = donations.map(donation => 
-      donation.id === donationId ? { ...donation, status: newStatus } : donation
-    );
-    setDonations(updatedDonations);
-    
-    if (selectedDonation && selectedDonation.id === donationId) {
-      setSelectedDonation({ ...selectedDonation, status: newStatus });
+  
+  const handleStatusChange = async (donationId, newStatus) => {
+    setActionLoading(true);
+    try {
+      const response = await donationService.updateDonationStatus(donationId, newStatus);
+      
+      if (response.success) {
+        const updatedDonations = donations.map(donation => 
+          donation._id === donationId ? { ...donation, status: newStatus } : donation
+        );
+        
+        setDonations(updatedDonations);
+        
+        const updatedStats = {
+          total: updatedDonations.length,
+          pending: updatedDonations.filter(d => d.status === 'pending').length,
+          confirmed: updatedDonations.filter(d => d.status === 'confirmed').length,
+          completed: updatedDonations.filter(d => d.status === 'completed').length,
+          cancelled: updatedDonations.filter(d => d.status === 'cancelled').length
+        };
+        setStats(updatedStats);
+        
+        setShowModal(false);
+      } else {
+        alert(response.message || 'Error updating donation status');
+      }
+    } catch (error) {
+      console.error('Error updating donation status:', error);
+      alert('Error updating donation status');
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  // Calculate pagination
-  const totalPages = Math.ceil(filteredDonations.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedDonations = filteredDonations.slice(startIndex, startIndex + itemsPerPage);
+  const navigateToDropLocations = () => {
+    navigate('/admin/drop-locations');
+  };
+  
+  const navigateToUserManagement = () => {
+    navigate('/admin/users');
+  };
+
+  const navigateToVolunteerManagement = () => {
+    navigate('/admin/volunteers');
+  };
+
+  const navigateToNgoApplication = () => {
+    navigate('/admin/ngo-application');
+  };
+
+  // Initialize map for donation location
+  const initMap = () => {
+    if (!window.google || !window.google.maps || !document.getElementById('donation-location-map')) {
+      return;
+    }
+    
+    const mapOptions = {
+      center: { lat: 20.5937, lng: 78.9629 }, // Center of India
+      zoom: 5,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false
+    };
+    
+    const map = new window.google.maps.Map(document.getElementById('donation-location-map'), mapOptions);
+    mapRef.current = map;
+    
+    // Add marker if donation has location
+    if (selectedDonation && selectedDonation.location && selectedDonation.location.coordinates) {
+      const { lat, lng } = selectedDonation.location.coordinates;
+      const position = { lat, lng };
+      
+      const marker = new window.google.maps.Marker({
+        position,
+        map,
+        title: 'Donation Location'
+      });
+      
+      markerRef.current = marker;
+      map.setCenter(position);
+      map.setZoom(15);
+    }
+  };
+  
+  // Initialize map when donation is selected
+  useEffect(() => {
+    if (selectedDonation) {
+      initMap();
+    }
+  }, [selectedDonation]);
+
+  const getDirectionsUrl = (donation) => {
+    if (!donation || !donation.coordinates) return '#';
+    
+    const coordinates = donation.coordinates;
+    const lat = coordinates.lat || 0;
+    const lng = coordinates.lng || 0;
+    const address = encodeURIComponent(donation.address);
+    
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&destination_place_id=${address}`;
+  };
+  
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   return (
     <PageWrapper>
       <Navbar />
       <Container>
         <DashboardHeader>
-          <Title>Admin Dashboard</Title>
-          <LogoutButton onClick={handleLogout}>Logout</LogoutButton>
+          <Title>
+            {currentUser && currentUser.role === 'manager' 
+              ? `${currentUser.associatedNgo?.name || 'NGO'} Dashboard` 
+              : currentUser && currentUser.role === 'admin'
+                ? 'Admin Dashboard'
+                : 'Dashboard'}
+          </Title>
+          <ButtonGroup>
+            {currentUser && currentUser.role === 'admin' && (
+              <>
+                <ActionLink onClick={navigateToDropLocations}>
+                  <FaMapMarkedAlt style={{ marginRight: '0.5rem' }} />
+                  Manage Drop Locations
+                </ActionLink>
+                <ActionLink onClick={navigateToUserManagement}>
+                  <FaUsers style={{ marginRight: '0.5rem' }} />
+                  Manage Users
+                </ActionLink>
+              </>
+            )}
+            {currentUser && currentUser.role === 'manager' && (
+              <ActionLink onClick={navigateToVolunteerManagement}>
+                <FaUsers style={{ marginRight: '0.5rem' }} />
+                Show Volunteers
+              </ActionLink>
+            )}
+            {currentUser && currentUser.role === 'volunteer' && (
+              <ActionLink onClick={navigateToNgoApplication}>
+                <FaUsers style={{ marginRight: '0.5rem' }} />
+                Apply for NGOs
+              </ActionLink>
+            )}
+            <LogoutButton onClick={handleLogout}>
+              <FaSignOutAlt style={{ marginRight: '0.5rem' }} />
+              Logout
+            </LogoutButton>
+          </ButtonGroup>
         </DashboardHeader>
         
-        <TabsContainer>
-          <Tab 
-            active={activeTab === 'all'} 
-            onClick={() => setActiveTab('all')}
-          >
-            All Donations
-          </Tab>
-          <Tab 
-            active={activeTab === 'pickup'} 
-            onClick={() => setActiveTab('pickup')}
-          >
-            Pickup Requests
-          </Tab>
-          <Tab 
-            active={activeTab === 'drop'} 
-            onClick={() => setActiveTab('drop')}
-          >
-            Drop-off Donations
-          </Tab>
-        </TabsContainer>
-        
-        <SearchContainer>
-          <SearchInput 
-            type="text" 
-            placeholder="Search by name, ID, pincode, or phone number" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <FilterSelect 
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="completed">Completed</option>
-            <option value="rejected">Rejected</option>
-          </FilterSelect>
-        </SearchContainer>
+        <DashboardStats>
+          <StatCard color="#007DBC">
+            <FaBoxOpen />
+            <StatValue>{stats.total}</StatValue>
+            <StatLabel>Total Donations</StatLabel>
+          </StatCard>
+          <StatCard color="#FFC107">
+            <FaSpinner />
+            <StatValue>{stats.pending}</StatValue>
+            <StatLabel>Pending</StatLabel>
+          </StatCard>
+          <StatCard color="#28A745">
+            <FaCheckCircle />
+            <StatValue>{stats.confirmed}</StatValue>
+            <StatLabel>Confirmed</StatLabel>
+          </StatCard>
+          <StatCard color="#17A2B8">
+            <FaCheckCircle />
+            <StatValue>{stats.completed}</StatValue>
+            <StatLabel>Completed</StatLabel>
+          </StatCard>
+          <StatCard color="#DC3545">
+            <FaTimesCircle />
+            <StatValue>{stats.cancelled}</StatValue>
+            <StatLabel>Cancelled</StatLabel>
+          </StatCard>
+        </DashboardStats>
         
         <Card>
-          <TableContainer>
-            <Table>
-              <thead>
-                <tr>
-                  <Th>ID</Th>
-                  <Th>Name</Th>
-                  <Th>Date</Th>
-                  <Th>Food Description</Th>
-                  <Th>Method</Th>
-                  <Th>Status</Th>
-                  <Th>Actions</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedDonations.length > 0 ? (
-                  paginatedDonations.map(donation => (
-                    <tr key={donation.id}>
-                      <Td>#{donation.id}</Td>
-                      <Td>{donation.fullName}</Td>
-                      <Td>{new Date(donation.date).toLocaleDateString()}</Td>
-                      <Td>{donation.items.length > 30 ? `${donation.items.substring(0, 30)}...` : donation.items}</Td>
-                      <Td>{donation.deliveryMethod === 'pickup' ? 'Pickup' : 'Drop-off'}</Td>
-                      <Td>
-                        <StatusBadge status={donation.status}>
-                          {donation.status.charAt(0).toUpperCase() + donation.status.slice(1)}
-                        </StatusBadge>
-                      </Td>
-                      <Td>
-                        <ActionButton 
-                          action="view"
-                          onClick={() => handleViewDonation(donation)}
-                        >
-                          View
-                        </ActionButton>
-                        
-                        {donation.status === 'pending' && (
-                          <>
-                            <ActionButton 
-                              action="approve"
-                              onClick={() => handleStatusChange(donation.id, 'approved')}
-                            >
-                              Approve
-                            </ActionButton>
-                            <ActionButton 
-                              action="reject"
-                              onClick={() => handleStatusChange(donation.id, 'rejected')}
-                            >
-                              Reject
-                            </ActionButton>
-                          </>
-                        )}
-                        
-                        {donation.status === 'approved' && (
-                          <ActionButton 
-                            action="complete"
-                            onClick={() => handleStatusChange(donation.id, 'completed')}
-                          >
-                            Complete
-                          </ActionButton>
-                        )}
-                      </Td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <Td colSpan="7">
-                      <EmptyState>
-                        No donations found matching your filters.
-                      </EmptyState>
-                    </Td>
-                  </tr>
-                )}
-              </tbody>
-            </Table>
-          </TableContainer>
+          <TabsContainer>
+            <Tab 
+              active={activeTab === 'all'} 
+              onClick={() => setActiveTab('all')}
+            >
+              All Donations
+            </Tab>
+            <Tab 
+              active={activeTab === 'pending'} 
+              onClick={() => setActiveTab('pending')}
+            >
+              Pending
+            </Tab>
+            <Tab 
+              active={activeTab === 'confirmed'} 
+              onClick={() => setActiveTab('confirmed')}
+            >
+              Confirmed
+            </Tab>
+            <Tab 
+              active={activeTab === 'completed'} 
+              onClick={() => setActiveTab('completed')}
+            >
+              Completed
+            </Tab>
+            <Tab 
+              active={activeTab === 'cancelled'} 
+              onClick={() => setActiveTab('cancelled')}
+            >
+              Cancelled
+            </Tab>
+          </TabsContainer>
           
-          {totalPages > 1 && (
-            <Pagination>
-              <PageButton 
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-              >
-                Previous
-              </PageButton>
-              
-              {[...Array(totalPages)].map((_, index) => (
-                <PageButton 
-                  key={index + 1}
-                  active={currentPage === index + 1}
-                  onClick={() => setCurrentPage(index + 1)}
-                >
-                  {index + 1}
-                </PageButton>
-              ))}
-              
-              <PageButton 
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </PageButton>
-            </Pagination>
+          <SearchContainer>
+            <FaSearch />
+            <SearchInput 
+              type="text" 
+              placeholder="Search by name, email, phone or ID..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <FilterSelect 
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </FilterSelect>
+          </SearchContainer>
+          
+          {loading ? (
+            <LoadingOverlay>
+              <FaSpinner />
+            </LoadingOverlay>
+          ) : (
+            <>
+              {currentItems.length > 0 ? (
+                <TableContainer>
+                  <Table>
+                    <thead>
+                      <tr>
+                        <Th>ID</Th>
+                        <Th>Name</Th>
+                        <Th>Type</Th>
+                        <Th>Items</Th>
+                        <Th>Status</Th>
+                        <Th>Date</Th>
+                        <Th>Actions</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentItems.map((donation) => (
+                        <tr key={donation._id}>
+                          <Td>#{donation.displayId}</Td>
+                          <Td>{donation.name}</Td>
+                          <Td>{donation.donationType === 'pickup' ? 'Pickup' : 'Drop-off'}</Td>
+                          <Td>{donation.items && Array.isArray(donation.items) ? donation.items.join(', ') : 'N/A'}</Td>
+                          <Td>
+                            <StatusBadge status={donation.status}>
+                              {donation.status.charAt(0).toUpperCase() + donation.status.slice(1)}
+                            </StatusBadge>
+                          </Td>
+                          <Td>{new Date(donation.createdAt).toLocaleDateString()}</Td>
+                          <Td>
+                            <ActionButton 
+                              action="view"
+                              onClick={() => handleViewDonation(donation)}
+                            >
+                              View
+                            </ActionButton>
+                            
+                            {donation.status === 'pending' && (
+                              <>
+                                <ActionButton 
+                                  action="approve"
+                                  onClick={() => handleStatusChange(donation._id, 'confirmed')}
+                                  disabled={actionLoading}
+                                >
+                                  Approve
+                                </ActionButton>
+                                <ActionButton 
+                                  action="reject"
+                                  onClick={() => handleStatusChange(donation._id, 'cancelled')}
+                                  disabled={actionLoading}
+                                >
+                                  Reject
+                                </ActionButton>
+                              </>
+                            )}
+                            
+                            {donation.status === 'confirmed' && (
+                              <ActionButton 
+                                action="complete"
+                                onClick={() => handleStatusChange(donation._id, 'completed')}
+                                disabled={actionLoading}
+                              >
+                                Complete
+                              </ActionButton>
+                            )}
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                  
+                  <Pagination>
+                    <PaginationButton 
+                      onClick={() => paginate(currentPage - 1)}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </PaginationButton>
+                    
+                    <PageInfo>
+                      Page {currentPage} of {totalPages}
+                    </PageInfo>
+                    
+                    <PaginationButton 
+                      onClick={() => paginate(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </PaginationButton>
+                  </Pagination>
+                </TableContainer>
+              ) : (
+                <EmptyState>
+                  No donations found matching the current filters.
+                </EmptyState>
+              )}
+            </>
           )}
         </Card>
-      </Container>
-      
-      {/* Donation Details Modal */}
-      {showModal && selectedDonation && (
-        <ModalOverlay>
-          <ModalContent>
-            <ModalHeader>
-              <ModalTitle>Donation Details #{selectedDonation.id}</ModalTitle>
-              <CloseButton onClick={() => setShowModal(false)}>&times;</CloseButton>
-            </ModalHeader>
-            <ModalBody>
-              <DetailItem>
-                <DetailLabel>Status</DetailLabel>
-                <StatusBadge status={selectedDonation.status}>
-                  {selectedDonation.status.charAt(0).toUpperCase() + selectedDonation.status.slice(1)}
-                </StatusBadge>
-              </DetailItem>
-              
-              <DetailItem>
-                <DetailLabel>Donor Name</DetailLabel>
-                <DetailValue>{selectedDonation.fullName}</DetailValue>
-              </DetailItem>
-              
-              <DetailItem>
-                <DetailLabel>Contact Number</DetailLabel>
-                <DetailValue>+91 {selectedDonation.contactNumber}</DetailValue>
-              </DetailItem>
-              
-              <DetailItem>
-                <DetailLabel>Date Submitted</DetailLabel>
-                <DetailValue>{new Date(selectedDonation.date).toLocaleDateString()}</DetailValue>
-              </DetailItem>
-              
-              <DetailItem>
-                <DetailLabel>Donation Method</DetailLabel>
-                <DetailValue>{selectedDonation.deliveryMethod === 'pickup' ? 'Pickup' : 'Drop-off'}</DetailValue>
-              </DetailItem>
-              
-              <DetailItem>
-                <DetailLabel>Pin Code</DetailLabel>
-                <DetailValue>{selectedDonation.pinCode}</DetailValue>
-              </DetailItem>
-              
-              {selectedDonation.deliveryMethod === 'pickup' ? (
-                <>
-                  <DetailItem>
-                    <DetailLabel>Address</DetailLabel>
-                    <DetailValue>{selectedDonation.address}</DetailValue>
-                  </DetailItem>
-                  
-                  {selectedDonation.landmark && (
-                    <DetailItem>
-                      <DetailLabel>Landmark</DetailLabel>
-                      <DetailValue>{selectedDonation.landmark}</DetailValue>
-                    </DetailItem>
-                  )}
-                  
-                  <DetailItem>
-                    <DetailLabel>City</DetailLabel>
-                    <DetailValue>{selectedDonation.city}</DetailValue>
-                  </DetailItem>
-                  
-                  <DetailItem>
-                    <DetailLabel>State</DetailLabel>
-                    <DetailValue>{selectedDonation.state}</DetailValue>
-                  </DetailItem>
-                </>
-              ) : (
+        
+        {/* Donation Details Modal */}
+        {showModal && selectedDonation && (
+          <ModalOverlay>
+            <ModalContent>
+              <ModalHeader>
+                <ModalTitle>Donation Details</ModalTitle>
+                <CloseButton onClick={() => setShowModal(false)}>&times;</CloseButton>
+              </ModalHeader>
+              <ModalBody>
                 <DetailItem>
-                  <DetailLabel>Selected Drop Location</DetailLabel>
+                  <DetailLabel>Donation ID</DetailLabel>
+                  <DetailValue>#{selectedDonation.displayId}</DetailValue>
+                </DetailItem>
+                
+                <DetailItem>
+                  <DetailLabel>Name</DetailLabel>
+                  <DetailValue>{selectedDonation.name}</DetailValue>
+                </DetailItem>
+                
+                <DetailItem>
+                  <DetailLabel>Contact</DetailLabel>
                   <DetailValue>
-                    {selectedDonation.selectedDropLocation?.name}<br />
-                    {selectedDonation.selectedDropLocation?.address}<br />
-                    Open: {selectedDonation.selectedDropLocation?.timings}
+                    {selectedDonation.phone}<br />
+                    {selectedDonation.email}
                   </DetailValue>
                 </DetailItem>
-              )}
-              
-              <DetailItem>
-                <DetailLabel>Food Description</DetailLabel>
-                <DetailValue>{selectedDonation.items}</DetailValue>
-              </DetailItem>
-              
-              {selectedDonation.notes && (
+                
                 <DetailItem>
-                  <DetailLabel>Additional Notes</DetailLabel>
-                  <DetailValue>{selectedDonation.notes}</DetailValue>
+                  <DetailLabel>Date Submitted</DetailLabel>
+                  <DetailValue>{formatDate(selectedDonation.createdAt)}</DetailValue>
                 </DetailItem>
-              )}
-              
-              <DetailItem>
-                <DetailLabel>Photo Verification</DetailLabel>
-                <ImagePreview src={selectedDonation.photoVerification} alt="Donation items" />
-              </DetailItem>
-            </ModalBody>
-            <ModalFooter>
-              {selectedDonation.status === 'pending' && (
-                <>
+                
+                <DetailItem>
+                  <DetailLabel>Donation Method</DetailLabel>
+                  <DetailValue>{selectedDonation.donationType === 'pickup' ? 'Pickup' : 'Drop-off'}</DetailValue>
+                </DetailItem>
+                
+                <DetailItem>
+                  <DetailLabel>Pin Code</DetailLabel>
+                  <DetailValue>{selectedDonation.pinCode}</DetailValue>
+                </DetailItem>
+                
+                {selectedDonation.donationType === 'pickup' ? (
+                  <>
+                    <DetailItem>
+                      <DetailLabel>Address</DetailLabel>
+                      <DetailValue>{selectedDonation.address}</DetailValue>
+                    </DetailItem>
+                    
+                    {selectedDonation.landmark && (
+                      <DetailItem>
+                        <DetailLabel>Landmark</DetailLabel>
+                        <DetailValue>{selectedDonation.landmark}</DetailValue>
+                      </DetailItem>
+                    )}
+                    
+                    <DetailItem>
+                      <DetailLabel>City</DetailLabel>
+                      <DetailValue>{selectedDonation.city}</DetailValue>
+                    </DetailItem>
+                    
+                    <DetailItem>
+                      <DetailLabel>State</DetailLabel>
+                      <DetailValue>{selectedDonation.state}</DetailValue>
+                    </DetailItem>
+                    
+                    <DetailItem>
+                      <DetailLabel>Location</DetailLabel>
+                      <DetailValue>
+                        <MapPreview id="donation-location-map"></MapPreview>
+                        <DirectionsButton 
+                          href={getDirectionsUrl(selectedDonation)} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                        >
+                          <FaDirections /> Get Directions
+                        </DirectionsButton>
+                      </DetailValue>
+                    </DetailItem>
+                  </>
+                ) : (
+                  <DetailItem>
+                    <DetailLabel>Drop Location ID</DetailLabel>
+                    <DetailValue>{selectedDonation.dropLocationId}</DetailValue>
+                  </DetailItem>
+                )}
+                
+                <DetailItem>
+                  <DetailLabel>Food Items</DetailLabel>
+                  <DetailValue>
+                    <ul style={{ margin: 0, paddingLeft: '1rem' }}>
+                      {selectedDonation.foodItems.map((item, index) => (
+                        <li key={index}>{item.name} - {item.quantity} {item.unit}</li>
+                      ))}
+                    </ul>
+                  </DetailValue>
+                </DetailItem>
+                
+                {selectedDonation.notes && (
+                  <DetailItem>
+                    <DetailLabel>Additional Notes</DetailLabel>
+                    <DetailValue>{selectedDonation.notes}</DetailValue>
+                  </DetailItem>
+                )}
+              </ModalBody>
+              <ModalFooter>
+                {/* Manager: Accept pickup */}
+                {selectedDonation.status === 'pending' && currentUser && currentUser.role === 'manager' && selectedDonation.donationType === 'pickup' && (
                   <ActionButton 
                     action="approve"
-                    onClick={() => handleStatusChange(selectedDonation.id, 'approved')}
+                    onClick={() => handleStatusChange(selectedDonation._id, 'confirmed')}
+                    disabled={actionLoading}
                   >
-                    Approve
+                    Accept Pickup
                   </ActionButton>
+                )}
+                {/* Manager: Confirm drop-off */}
+                {selectedDonation.status === 'pending' && currentUser && currentUser.role === 'manager' && selectedDonation.donationType === 'drop-off' && (
                   <ActionButton 
-                    action="reject"
-                    onClick={() => handleStatusChange(selectedDonation.id, 'rejected')}
+                    action="approve"
+                    onClick={() => handleStatusChange(selectedDonation._id, 'confirmed')}
+                    disabled={actionLoading}
                   >
-                    Reject
+                    Confirm Drop-off
                   </ActionButton>
-                </>
-              )}
-              
-              {selectedDonation.status === 'approved' && (
+                )}
+                {/* Admin: Confirm/cancel */}
+                {selectedDonation.status === 'pending' && currentUser && currentUser.role === 'admin' && (
+                  <>
+                    <ActionButton 
+                      action="approve"
+                      onClick={() => handleStatusChange(selectedDonation._id, 'confirmed')}
+                      disabled={actionLoading}
+                    >
+                      Confirm
+                    </ActionButton>
+                    <ActionButton 
+                      action="reject"
+                      onClick={() => handleStatusChange(selectedDonation._id, 'cancelled')}
+                      disabled={actionLoading}
+                    >
+                      Cancel
+                    </ActionButton>
+                  </>
+                )}
+                
+                {/* Complete donation (admin/manager) */}
+                {selectedDonation.status === 'confirmed' && (
+                  <ActionButton 
+                    action="complete"
+                    onClick={() => handleStatusChange(selectedDonation._id, 'completed')}
+                    disabled={actionLoading}
+                  >
+                    Complete
+                  </ActionButton>
+                )}
+                
                 <ActionButton 
-                  action="complete"
-                  onClick={() => handleStatusChange(selectedDonation.id, 'completed')}
+                  action="view"
+                  onClick={() => setShowModal(false)}
                 >
-                  Complete
+                  Close
                 </ActionButton>
-              )}
-              
-              <ActionButton 
-                action="view"
-                onClick={() => setShowModal(false)}
-              >
-                Close
-              </ActionButton>
-            </ModalFooter>
-          </ModalContent>
-        </ModalOverlay>
-      )}
+              </ModalFooter>
+            </ModalContent>
+          </ModalOverlay>
+        )}
+      </Container>
     </PageWrapper>
   );
 };

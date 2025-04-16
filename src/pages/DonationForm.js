@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styled, { keyframes } from 'styled-components';
 import Navbar from '../components/Navbar';
-import { MapContainer as MapComponent, TileLayer, Marker, useMap, Popup } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { FaMapMarkerAlt, FaExclamationTriangle, FaPlus, FaTrash } from 'react-icons/fa';
+import { donationService, geocodeService } from '../services/api';
 
 const PageWrapper = styled.div`
   min-height: 100vh;
@@ -40,10 +39,16 @@ const ImageSection = styled.div`
 `;
 
 const FormSection = styled.div`
-  padding: 3rem;
+  padding: 2rem;
   background: white;
-  overflow-y: auto; /* Add scrolling for content that exceeds the fixed height */
+  overflow-y: auto;
   height: 100%;
+  
+  /* Prevent horizontal scrolling */
+  overflow-x: hidden;
+  
+  /* Add some breathing room at the bottom */
+  padding-bottom: 3rem;
 `;
 
 const HeroText = styled.h1`
@@ -294,25 +299,34 @@ const TextArea = styled.textarea`
   }
 `;
 
-const SubmitButton = styled.button`
-  background-color: #007DBC;
-  color: white;
+const SubmitButton = styled(Button)`
+  background: #007DBC;
   border: none;
-  border-radius: 4px;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.3s;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   
   &:hover {
-    background-color: #0069a3;
+    background: #006ba3;
   }
   
-  &:disabled {
-    background-color: #cccccc;
+  ${props => props.isSubmitting && `
+    opacity: 0.7;
     cursor: not-allowed;
-  }
+    
+    &:after {
+      content: '';
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid white;
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 1s linear infinite;
+    }
+  `}
 `;
 
 const SuccessMessage = styled.div`
@@ -374,15 +388,13 @@ const fadeIn = keyframes`
   }
 `;
 
-const CheckmarkCircle = styled.circle`
+const Circle = styled.circle`
   fill: none;
   stroke: #007DBC;
-  stroke-width: 2;
-  stroke-miterlimit: 10;
-  stroke-dasharray: 100;
-  stroke-dashoffset: 100;
-  animation: ${checkmarkAnimation} 1.5s cubic-bezier(0.65, 0, 0.45, 1) forwards;
-  animation-delay: 0.2s;
+  stroke-width: 3;
+  stroke-dasharray: 440;
+  stroke-dashoffset: 440;
+  animation: ${checkmarkAnimation} 1.5s ease-in-out forwards;
 `;
 
 const CheckmarkPath = styled.path`
@@ -449,6 +461,23 @@ const DetailValue = styled.span`
   color: #333;
 `;
 
+const DonationDetails = styled.div`
+  margin-top: 2rem;
+  border-top: 1px solid #eee;
+  padding-top: 1rem;
+  width: 100%;
+`;
+
+const DetailRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.8rem;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
 const LocationCard = styled.div`
   background: white;
   border-radius: 8px;
@@ -460,12 +489,12 @@ const LocationCard = styled.div`
   border-left: 4px solid transparent;
   
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    border-left-color: #007DBC;
   }
   
   &.selected {
-    border-left: 4px solid #007DBC;
+    border-left-color: #007DBC;
     background-color: #f0f8ff;
   }
 `;
@@ -483,6 +512,13 @@ const LocationAddress = styled.p`
 `;
 
 const LocationTimings = styled.p`
+  margin: 0;
+  font-size: 0.8rem;
+  color: #888;
+  font-style: italic;
+`;
+
+const LocationDetail = styled.p`
   margin: 0;
   font-size: 0.8rem;
   color: #888;
@@ -512,379 +548,732 @@ const MapContainer = styled.div`
   border: 1px solid #ddd;
 `;
 
-const dropLocations = [
-  {
-    id: 1,
-    name: "Apna Shelter Main Center",
-    address: "123 Charity Road, Mumbai",
-    pincode: "400001",
-    coordinates: [19.0760, 72.8777],
-    timings: "9:00 AM - 6:00 PM"
-  },
-  {
-    id: 2,
-    name: "Community Center Branch",
-    address: "45 Hope Street, Mumbai",
-    pincode: "400002",
-    coordinates: [19.0825, 72.8900],
-    timings: "10:00 AM - 5:00 PM"
-  },
-  {
-    id: 3,
-    name: "Eastern Mumbai Collection Point",
-    address: "78 Giving Lane, Mumbai",
-    pincode: "400003",
-    coordinates: [19.0650, 72.8950],
-    timings: "8:00 AM - 7:00 PM"
-  },
-  {
-    id: 4,
-    name: "Northern Collection Center",
-    address: "22 Donation Avenue, Mumbai",
-    pincode: "400004",
-    coordinates: [19.0900, 72.8700],
-    timings: "9:30 AM - 6:30 PM"
-  },
-  {
-    id: 5,
-    name: "Southern Mumbai Branch",
-    address: "56 Charity Street, Mumbai",
-    pincode: "400005",
-    coordinates: [19.0500, 72.8600],
-    timings: "10:00 AM - 8:00 PM"
+const LoadingMessage = styled.div`
+  color: #007DBC;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  
+  &:before {
+    content: '';
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid #007DBC;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
   }
-];
-
-// Fix Leaflet default icon issue
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-});
-
-const FlyToLocation = ({ center, pincode, setPosition }) => {
-  const map = useMap();
-  const searchedRef = useRef(false);
-  const zoomRef = useRef(null);
   
-  // First, center on the provided coordinates
-  useEffect(() => {
-    if (center) {
-      // Store current zoom if it exists
-      if (map.getZoom()) {
-        zoomRef.current = map.getZoom();
-      }
-      
-      map.flyTo(center, zoomRef.current || 13, {
-        duration: 1.5,
-        animate: true
-      });
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
     }
-  }, [map, center]);
-  
-  // Then, search for the pincode if available
-  useEffect(() => {
-    const searchPincode = async () => {
-      if (!pincode || searchedRef.current) return;
-      
-      try {
-        // Search for the pincode location
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(pincode + ' India')}`);
-        const data = await response.json();
-        
-        if (data && data.length > 0) {
-          const { lat, lon } = data[0];
-          const newPosition = [parseFloat(lat), parseFloat(lon)];
-          
-          // Update the marker position
-          setPosition(newPosition);
-          
-          // Fly to the found location with maximum zoom (18 is typically the max for most areas)
-          map.flyTo(newPosition, 18, {
-            duration: 1.5,
-            animate: true
-          });
-          
-          // Store this zoom level
-          zoomRef.current = 18;
-          
-          // Mark as searched so we don't search again
-          searchedRef.current = true;
-          
-          console.log(`Found location for pincode ${pincode}: ${data[0].display_name}`);
-        } else {
-          console.log(`No location found for pincode ${pincode}`);
-        }
-      } catch (error) {
-        console.error('Error searching for pincode location:', error);
-      }
-    };
-    
-    searchPincode();
-  }, [map, pincode, setPosition]);
-  
-  return null;
-};
+  }
+`;
 
-const MapClickHandler = ({ onMapClick }) => {
-  const map = useMap();
+const ItemCard = styled.div`
+  background: white;
+  border-radius: 50px;
+  padding: 15px 25px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e0e0e0;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 20px;
+  position: relative;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const ItemName = styled.div`
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #333;
+`;
+
+const ItemQuantity = styled.div`
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+  text-align: right;
+`;
+
+const ItemUnit = styled.div`
+  font-size: 1.1rem;
+  color: #333;
+  min-width: 60px;
+`;
+
+const Select = styled.select`
+  padding: 0.8rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  
+  &:focus {
+    outline: none;
+    border-color: #007DBC;
+  }
+`;
+
+const DeleteButton = styled.button`
+  position: absolute;
+  top: 50%;
+  right: 15px;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    color: #ff5252;
+  }
+`;
+
+const AddItemButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 50px;
+  padding: 12px 20px;
+  width: 100%;
+  color: #666;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 12px;
+  
+  &:hover {
+    background: #eaeaea;
+  }
+`;
+
+const Modal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+`;
+
+const ModalContent = styled.div`
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+`;
+
+const ModalTitle = styled.h3`
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #344767;
+`;
+
+const ModalButtons = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+`;
+
+const CancelModalButton = styled.button`
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  color: #666;
+  cursor: pointer;
+  
+  &:hover {
+    background: #f5f5f5;
+  }
+`;
+
+const SaveModalButton = styled.button`
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #007DBC;
+  color: white;
+  cursor: pointer;
+  
+  &:hover {
+    background: #0069a3;
+  }
+`;
+
+const MapComponent = ({ position: initialPosition, setPosition, onMapClick }) => {
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const searchBoxRef = useRef(null);
+  const [searchBox, setSearchBox] = useState(null);
+  const positionRef = useRef(initialPosition);
+  
+  // Load Google Maps API directly with script tag instead of using the hook
+  const [mapsLoaded, setMapsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  
+  // Use a ref to track position instead of state to prevent re-renders
+  useEffect(() => {
+    positionRef.current = initialPosition;
+    
+    // Only update marker position if map is already initialized
+    if (mapsLoaded && mapRef.current && markerRef.current) {
+      markerRef.current.setPosition(initialPosition);
+    }
+  }, [initialPosition, mapsLoaded]);
   
   useEffect(() => {
-    if (!map) return;
+    // Check if Google Maps API is already loaded
+    if (window.google && window.google.maps) {
+      setMapsLoaded(true);
+      return;
+    }
     
-    map.on('click', onMapClick);
+    // Load Google Maps API
+    const googleMapScript = document.createElement('script');
+    googleMapScript.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}&libraries=places,geometry`;
+    googleMapScript.async = true;
+    googleMapScript.defer = true;
+    
+    // Handle script load success
+    googleMapScript.addEventListener('load', () => {
+      setMapsLoaded(true);
+    });
+    
+    // Handle script load error
+    googleMapScript.addEventListener('error', () => {
+      setLoadError(true);
+    });
+    
+    document.body.appendChild(googleMapScript);
     
     return () => {
-      map.off('click', onMapClick);
+      // Clean up script tag on component unmount
+      if (googleMapScript.parentNode) {
+        googleMapScript.parentNode.removeChild(googleMapScript);
+      }
     };
-  }, [map, onMapClick]);
+  }, []);
   
-  return null;
+  // Initialize map only once when the Google Maps API is loaded
+  useEffect(() => {
+    if (!mapsLoaded || !document.getElementById('google-map')) return;
+    
+    // Create map instance
+    const mapOptions = {
+      center: positionRef.current || { lat: 19.0760, lng: 72.8777 }, // Default to Mumbai
+      zoom: 18,
+      streetViewControl: false,
+      mapTypeControl: false,
+      fullscreenControl: false
+    };
+    
+    const map = new window.google.maps.Map(document.getElementById('google-map'), mapOptions);
+    mapRef.current = map;
+    
+    // Create marker if position exists
+    if (positionRef.current) {
+      const marker = new window.google.maps.Marker({
+        position: positionRef.current,
+        map: map,
+        animation: window.google.maps.Animation.DROP,
+        icon: {
+          url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+          scaledSize: new window.google.maps.Size(40, 40)
+        }
+      });
+      markerRef.current = marker;
+    }
+    
+    // Add click event listener to map
+    map.addListener('click', (e) => {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      const newPosition = { lat, lng };
+      
+      // Update marker position or create new marker
+      if (markerRef.current) {
+        markerRef.current.setPosition(newPosition);
+      } else {
+        const marker = new window.google.maps.Marker({
+          position: newPosition,
+          map: map,
+          animation: window.google.maps.Animation.DROP,
+          icon: {
+            url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+            scaledSize: new window.google.maps.Size(40, 40)
+          }
+        });
+        markerRef.current = marker;
+      }
+      
+      // Update the position ref and call the callback
+      positionRef.current = newPosition;
+      setPosition(newPosition);
+      onMapClick(newPosition);
+    });
+    
+    // Create search box
+    const input = document.getElementById('map-search-box');
+    if (input) {
+      const searchBoxInstance = new window.google.maps.places.SearchBox(input);
+      searchBoxRef.current = searchBoxInstance;
+      setSearchBox(searchBoxInstance);
+      
+      // Bias the SearchBox results towards current map's viewport
+      map.addListener('bounds_changed', () => {
+        searchBoxInstance.setBounds(map.getBounds());
+      });
+      
+      // Listen for the event fired when the user selects a prediction
+      searchBoxInstance.addListener('places_changed', () => {
+        const places = searchBoxInstance.getPlaces();
+        
+        if (places && places.length > 0) {
+          const place = places[0];
+          
+          if (place.geometry && place.geometry.location) {
+            const newPosition = {
+              lat: place.geometry.location.lat(),
+              lng: place.geometry.location.lng()
+            };
+            
+            // Update marker position or create new marker
+            if (markerRef.current) {
+              markerRef.current.setPosition(newPosition);
+            } else {
+              const marker = new window.google.maps.Marker({
+                position: newPosition,
+                map: map,
+                animation: window.google.maps.Animation.DROP,
+                icon: {
+                  url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                  scaledSize: new window.google.maps.Size(40, 40)
+                }
+              });
+              markerRef.current = marker;
+            }
+            
+            // Center the map on the selected location
+            map.panTo(newPosition);
+            map.setZoom(19);
+            
+            // Update the position ref and call the callback
+            positionRef.current = newPosition;
+            setPosition(newPosition);
+            onMapClick(newPosition);
+          }
+        }
+      });
+    }
+    
+    // This effect should only run once when the map is first initialized
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapsLoaded]);
+  
+  if (loadError) {
+    return (
+      <div style={{ 
+        height: '100%', 
+        width: '100%', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        backgroundColor: '#f5f5f5',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <FaExclamationTriangle size={32} color="#d9534f" />
+        <p>Error loading maps. Please try again later.</p>
+      </div>
+    );
+  }
+  
+  return (
+    <MapContainer>
+      {mapsLoaded ? (
+        <>
+          <div style={{ 
+            position: 'relative',
+            width: '100%',
+            height: '100%'
+          }}>
+            <div style={{ 
+              position: 'absolute', 
+              top: '10px', 
+              left: '10px', 
+              right: '10px', 
+              zIndex: 10,
+              backgroundColor: 'white',
+              borderRadius: '4px',
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.3)'
+            }}>
+              <input
+                id="map-search-box"
+                type="text"
+                placeholder="Search for an address"
+                style={{
+                  width: '100%',
+                  height: '40px',
+                  padding: '0 12px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+              />
+            </div>
+            <div 
+              id="google-map" 
+              style={{ 
+                height: '100%', 
+                width: '100%' 
+              }}
+            ></div>
+          </div>
+        </>
+      ) : (
+        <div style={{ 
+          height: '100%', 
+          width: '100%', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          backgroundColor: '#f5f5f5',
+          flexDirection: 'column',
+          gap: '1rem'
+        }}>
+          <FaMapMarkerAlt size={32} color="#007DBC" />
+          <p>Loading map...</p>
+        </div>
+      )}
+    </MapContainer>
+  );
 };
 
-const DonationForm = () => {
-  const [deliveryMethod, setDeliveryMethod] = useState('pickup');
-  const [currentStep, setCurrentStep] = useState(1);
+function DonationForm() {
+  // Form state
   const [formData, setFormData] = useState({
-    fullName: '',
-    contactNumber: '',
-    pinCode: '',
+    name: '',
+    email: '',
+    phone: '',
+    donationType: 'drop-off',
     address: '',
     landmark: '',
     city: '',
     state: '',
-    items: '',
-    notes: '',
-    photoVerification: null,
-    selectedDropLocation: null
+    pinCode: '',
+    coordinates: { lat: 0, lng: 0 },
+    dropLocationId: '',
+    foodItems: [],
+    notes: ''
   });
-  const [photoPreview, setPhotoPreview] = useState(null);
+  
+  // UI state
+  const [currentStep, setCurrentStep] = useState(1);
   const [errors, setErrors] = useState({});
-  const [mapPosition, setMapPosition] = useState([19.0760, 72.8777]); // Mumbai coordinates
-  const [nearbyDropLocations, setNearbyDropLocations] = useState([]);
-  const [selectedLocationId, setSelectedLocationId] = useState(null);
-  const [showingDropLocations, setShowingDropLocations] = useState(false);
-
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [position, setPosition] = useState({ lat: 19.0760, lng: 72.8777 }); // Default to Mumbai
+  const [dropLocations, setDropLocations] = useState([]);
+  const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+  const [showFoodItemModal, setShowFoodItemModal] = useState(false);
+  const [newFoodItem, setNewFoodItem] = useState({ name: '', quantity: '', unit: 'units' });
+  const [editingFoodItemId, setEditingFoodItemId] = useState(null);
+  
+  // Fetch drop locations when pincode changes
+  useEffect(() => {
+    const fetchDropLocations = async () => {
+      if (formData.donationType === 'drop-off' && formData.pinCode && formData.pinCode.length === 6) {
+        setIsLoadingLocations(true);
+        try {
+          const response = await donationService.findNearbyDropLocations(formData.pinCode);
+          if (response.success) {
+            setDropLocations(response.data);
+          } else {
+            setDropLocations([]);
+          }
+        } catch (error) {
+          console.error('Error fetching drop locations:', error);
+          setDropLocations([]);
+        } finally {
+          setIsLoadingLocations(false);
+        }
+      }
+    };
+    
+    fetchDropLocations();
+  }, [formData.donationType, formData.pinCode]);
+  
+  // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    
+    // Update form data
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
     
-    // Clear error when user starts typing
+    // Clear errors for this field
     if (errors[name]) {
-      setErrors(prev => ({
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+    
+    // Special handling for PIN code in drop-off mode
+    if (name === 'pinCode' && formData.donationType === 'drop-off' && value.length === 6) {
+      // Reset drop location selection when PIN code changes
+      setFormData(prev => ({
         ...prev,
-        [name]: ''
+        dropLocationId: ''
       }));
     }
   };
   
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setFormData(prev => ({
-        ...prev,
-        photoVerification: file
-      }));
+  // Handle delivery method change
+  const handleDeliveryChange = (method) => {
+    setFormData(prevData => ({ ...prevData, donationType: method }));
+  };
+  
+  // Handle map click
+  const handleMapClick = async (position) => {
+    try {
+      setIsLoadingLocations(true);
+      // Call the reverse geocoding service
+      const response = await geocodeService.reverseGeocode(position.lat, position.lng);
       
-      // Create a preview URL for the image
-      const previewUrl = URL.createObjectURL(file);
-      setPhotoPreview(previewUrl);
+      console.log('Geocode response:', response); // Debug log
       
-      // Clear error if it exists
-      if (errors.photoVerification) {
+      if (response && response.data) {
+        const addressData = response.data;
+        
+        // Update form data with address details
+        setFormData(prev => ({
+          ...prev,
+          address: addressData.address || '',
+          landmark: prev.landmark, // Preserve landmark if already entered
+          city: addressData.city || '',
+          state: addressData.state || '',
+          pinCode: addressData.zipcode || '',
+          coordinates: position
+        }));
+        
+        // Clear any address-related errors
         setErrors(prev => ({
           ...prev,
-          photoVerification: ''
+          address: '',
+          city: '',
+          state: '',
+          pinCode: ''
         }));
       }
+    } catch (error) {
+      console.error('Error during reverse geocoding:', error);
+      // Show error message to user
+      setErrors(prev => ({
+        ...prev,
+        address: 'Failed to get address from map. Please enter manually.'
+      }));
+    } finally {
+      setIsLoadingLocations(false);
     }
   };
 
-  const handleDeliveryChange = (method) => {
-    setDeliveryMethod(method);
-  };
-
-  const findNearbyDropLocations = (pincode) => {
-    // In a real application, this would be an API call to get locations near the pincode
-    // For this demo, we'll filter our mock data to simulate finding nearby locations
+  const validateStep = (step) => {
+    const newErrors = {};
     
-    // First, find the coordinates for the entered pincode
-    const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(pincode + ' India')}`;
-    
-    fetch(geocodeUrl)
-      .then(response => response.json())
-      .then(data => {
-        if (data && data.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lon = parseFloat(data[0].lon);
-          
-          // Find "nearby" drop locations (in a real app, this would use distance calculations)
-          // For demo purposes, we'll just show all locations but sort them by a simulated "distance"
-          const locationsWithDistance = dropLocations.map(location => {
-            // Calculate a simple distance (not accurate, just for demo)
-            const dlat = location.coordinates[0] - lat;
-            const dlon = location.coordinates[1] - lon;
-            const distance = Math.sqrt(dlat * dlat + dlon * dlon);
-            
-            return {
-              ...location,
-              distance
-            };
-          });
-          
-          // Sort by distance and take the closest 5
-          const sortedLocations = locationsWithDistance
-            .sort((a, b) => a.distance - b.distance)
-            .slice(0, 5);
-          
-          setNearbyDropLocations(sortedLocations);
-          setShowingDropLocations(true);
-          
-          // If there are locations, select the first one by default
-          if (sortedLocations.length > 0) {
-            handleSelectDropLocation(sortedLocations[0].id);
-          }
-        } else {
-          console.log('No location found for pincode:', pincode);
-          setNearbyDropLocations([]);
-          setShowingDropLocations(true);
+    if (step === 1) {
+      // Validate personal information
+      if (!formData.name) newErrors.name = 'Name is required';
+      if (!formData.email) newErrors.email = 'Email is required';
+      else if (!/^\S+@\S+\.\S+$/.test(formData.email)) newErrors.email = 'Invalid email format';
+      
+      if (!formData.phone) newErrors.phone = 'Phone number is required';
+      else if (!/^\d{10}$/.test(formData.phone)) newErrors.phone = 'Phone must be 10 digits';
+    } else if (step === 2) {
+      // Validate location information
+      if (!formData.pinCode) newErrors.pinCode = 'PIN code is required';
+      else if (!/^\d{6}$/.test(formData.pinCode)) newErrors.pinCode = 'PIN code must be 6 digits';
+      
+      if (formData.donationType === 'pickup') {
+        // Validate pickup specific fields
+        if (!formData.address) newErrors.address = 'Address is required for pickup';
+        if (!formData.city) newErrors.city = 'City is required for pickup';
+        if (!formData.state) newErrors.state = 'State is required for pickup';
+        
+        if (!formData.coordinates || !formData.coordinates.lat || !formData.coordinates.lng) {
+          newErrors.coordinates = 'Please select your location on the map';
         }
-      })
-      .catch(error => {
-        console.error('Error searching for pincode location:', error);
-        setNearbyDropLocations([]);
-        setShowingDropLocations(true);
-      });
+      } else {
+        // Validate drop-off specific fields
+        if (!formData.pinCode) newErrors.pinCode = 'PIN code is required for drop-off';
+        if (!formData.dropLocationId) newErrors.dropLocationId = 'Please select a drop location';
+      }
+    } else if (step === 3) {
+      // Validate food items
+      if (!formData.foodItems || formData.foodItems.length === 0) {
+        newErrors.foodItems = 'Please add at least one food item';
+      }
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleSelectDropLocation = (locationId) => {
-    setSelectedLocationId(locationId);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     
-    // Find the selected location and update form data
-    const selectedLocation = nearbyDropLocations.find(loc => loc.id === locationId);
-    if (selectedLocation) {
+    if (!validateStep(currentStep)) {
+      return; // Stop if validation fails
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Prepare donation data
+      const donationData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        donationType: formData.donationType,
+        foodItems: formData.foodItems,
+        notes: formData.notes,
+        pinCode: formData.pinCode,
+        ...(formData.donationType === 'pickup' ? {
+          address: formData.address,
+          landmark: formData.landmark,
+          city: formData.city,
+          state: formData.state,
+          coordinates: formData.coordinates
+        } : {
+          dropLocationId: formData.dropLocationId
+        })
+      };
+      
+      // Submit donation to backend
+      const response = await donationService.createDonation(donationData);
+      
+      if (response.success) {
+        setIsSubmitted(true);
+        // Reset form after successful submission
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          donationType: 'drop-off',
+          address: '',
+          landmark: '',
+          city: '',
+          state: '',
+          pinCode: '',
+          coordinates: { lat: 0, lng: 0 },
+          dropLocationId: '',
+          foodItems: [],
+          notes: ''
+        });
+      } else {
+        setErrors(prev => ({
+          ...prev,
+          submission: response.message || 'Error submitting donation'
+        }));
+      }
+    } catch (error) {
+      console.error('Error submitting donation:', error);
+      setErrors(prev => ({
+        ...prev,
+        submission: 'Error submitting donation. Please try again later.'
+      }));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const addFoodItem = () => {
+    setNewFoodItem({ name: '', quantity: '', unit: 'units' });
+    setEditingFoodItemId(null);
+    setShowFoodItemModal(true);
+  };
+  
+  const editFoodItem = (id) => {
+    const item = formData.foodItems.find(item => item.id === id);
+    if (item) {
+      setNewFoodItem({ ...item });
+      setEditingFoodItemId(id);
+      setShowFoodItemModal(true);
+    }
+  };
+  
+  const saveFoodItem = () => {
+    if (!newFoodItem.name || !newFoodItem.quantity) {
+      return; // Don't save if required fields are empty
+    }
+    
+    if (editingFoodItemId) {
+      // Update existing item
       setFormData(prev => ({
         ...prev,
-        selectedDropLocation: selectedLocation
+        foodItems: prev.foodItems.map(item => 
+          item.id === editingFoodItemId ? { ...newFoodItem, id: item.id } : item
+        )
+      }));
+    } else {
+      // Add new item
+      setFormData(prev => ({
+        ...prev,
+        foodItems: [
+          ...prev.foodItems,
+          { ...newFoodItem, id: Date.now() }
+        ]
       }));
     }
+    
+    setShowFoodItemModal(false);
+  };
+  
+  const removeFoodItem = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      foodItems: prev.foodItems.filter(item => item.id !== id)
+    }));
   };
 
-  const validateStep1 = () => {
-    const newErrors = {};
-    
-    if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
-    }
-    
-    if (!formData.contactNumber.trim()) {
-      newErrors.contactNumber = 'Contact number is required';
-    } else if (!/^\d{10}$/.test(formData.contactNumber.trim())) {
-      newErrors.contactNumber = 'Please enter a valid 10-digit contact number';
-    }
-    
-    if (!formData.photoVerification) {
-      newErrors.photoVerification = 'Please upload a photo for verification';
-    }
-    
-    if (!formData.pinCode.trim()) {
-      newErrors.pinCode = 'Pin code is required';
-    } else if (!/^\d{6}$/.test(formData.pinCode.trim())) {
-      newErrors.pinCode = 'Please enter a valid 6-digit pin code';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const validateStep2 = () => {
-    const newErrors = {};
-    
-    if (deliveryMethod === 'pickup') {
-      if (!formData.address.trim()) {
-        newErrors.address = 'Address is required';
-      }
-      
-      if (!formData.city.trim()) {
-        newErrors.city = 'City is required';
-      }
-      
-      if (!formData.state.trim()) {
-        newErrors.state = 'State is required';
-      }
-      
-      if (!formData.items.trim()) {
-        newErrors.items = 'Please describe the food you wish to donate';
-      }
-    } else if (deliveryMethod === 'drop') {
-      if (!formData.selectedDropLocation) {
-        newErrors.selectedDropLocation = 'Please select a drop location';
-      }
-      
-      if (!formData.items.trim()) {
-        newErrors.items = 'Please describe the food you wish to donate';
-      }
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleNextStep = (e) => {
-    e.preventDefault();
-    
-    if (currentStep === 1) {
-      if (validateStep1()) {
-        if (deliveryMethod === 'drop' && formData.pinCode) {
-          // Find nearby drop locations based on pincode
-          findNearbyDropLocations(formData.pinCode);
-        }
-        setCurrentStep(2);
-      }
-    } else if (currentStep === 2) {
-      if (validateStep2()) {
-        setCurrentStep(3);
-      }
-    }
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    if (validateStep2()) {
-      console.log('Form submitted:', formData);
-      setCurrentStep(3);
-    }
-  };
-
-  const handleMapClick = (e) => {
-    const { lat, lng } = e.latlng;
-    setMapPosition([lat, lng]);
-    
-    // Reverse geocode to get address details
-    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
-      .then(response => response.json())
-      .then(data => {
-        if (data && data.address) {
-          const address = data.address;
-          
-          // Update form data with address details
-          setFormData(prev => ({
-            ...prev,
-            address: data.display_name.split(',').slice(0, 3).join(', ') || '',
-            city: address.city || address.town || address.village || '',
-            state: address.state || '',
-            pinCode: address.postcode || prev.pinCode
-          }));
-        }
-      })
-      .catch(error => {
-        console.error('Error reverse geocoding:', error);
-      });
+  const handleFoodItemChange = (e) => {
+    const { name, value } = e.target;
+    setNewFoodItem(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   return (
@@ -893,320 +1282,295 @@ const DonationForm = () => {
       <Container>
         <Card>
           <ImageSection>
-            <HeroText>We Can Save The Future</HeroText>
+            <HeroText>
+              {currentStep === 1 && "Your Donation Journey Begins Here"}
+              {currentStep === 2 && formData.donationType === 'pickup' && "Where Should We Pick Up?"}
+              {currentStep === 2 && formData.donationType === 'drop-off' && "Choose a Drop Location"}
+              {currentStep === 3 && "What Food Items Are You Donating?"}
+              {currentStep === 4 && "Thank You for Your Generosity!"}
+            </HeroText>
           </ImageSection>
           <FormSection>
-            <FormTitle>Donation Form</FormTitle>
-            {currentStep === 3 ? (
+            {isSubmitted ? (
               <SuccessMessage>
                 <SuccessIconContainer>
-                  <svg width="80" height="80" viewBox="0 0 50 50">
-                    <CheckmarkCircle cx="25" cy="25" r="22" />
-                    <CheckmarkPath d="M14,27 L22,35 L36,15" />
+                  <svg width="150" height="150" viewBox="0 0 150 150">
+                    <Circle cx="75" cy="75" r="70" />
+                    <CheckmarkPath d="M 40,75 L 65,100 L 110,50" />
                   </svg>
                 </SuccessIconContainer>
-                
-                <SuccessTitle>Thank You!</SuccessTitle>
-                <SuccessText>Your donation request has been submitted successfully.</SuccessText>
-                <SuccessText delay="1.6s">
-                  {deliveryMethod === 'pickup' ? (
-                    'We will arrange a pickup from your location soon. Our team will contact you at the provided number to confirm the details.'
-                  ) : (
-                    `Please drop your items at the selected location: ${formData.selectedDropLocation?.name}. The center is open during ${formData.selectedDropLocation?.timings}.`
-                  )}
-                </SuccessText>
-                
-                <SuccessDetails>
-                  {deliveryMethod === 'pickup' ? (
-                    <>
-                      <DetailItem>
-                        <DetailLabel>Contact:</DetailLabel>
-                        <DetailValue>{formData.contactNumber}</DetailValue>
-                      </DetailItem>
-                      <DetailItem>
-                        <DetailLabel>Pincode:</DetailLabel>
-                        <DetailValue>{formData.pinCode}</DetailValue>
-                      </DetailItem>
-                    </>
-                  ) : (
-                    <>
-                      <DetailItem>
-                        <DetailLabel>Drop Location:</DetailLabel>
-                        <DetailValue>{formData.selectedDropLocation?.name}</DetailValue>
-                      </DetailItem>
-                      <DetailItem>
-                        <DetailLabel>Address:</DetailLabel>
-                        <DetailValue>{formData.selectedDropLocation?.address}</DetailValue>
-                      </DetailItem>
-                      <DetailItem>
-                        <DetailLabel>Timings:</DetailLabel>
-                        <DetailValue>{formData.selectedDropLocation?.timings}</DetailValue>
-                      </DetailItem>
-                    </>
-                  )}
-                  <DetailItem>
-                    <DetailLabel>Reference ID:</DetailLabel>
-                    <DetailValue>#{Math.floor(100000 + Math.random() * 900000)}</DetailValue>
-                  </DetailItem>
-                </SuccessDetails>
+                <h2>Donation Submitted Successfully!</h2>
+                <p>Thank you for your generosity. Your donation will help feed those in need.</p>
+                <p>We'll contact you shortly with next steps.</p>
               </SuccessMessage>
-            ) : currentStep === 1 ? (
-              <Form onSubmit={handleNextStep}>
-                <InputGroup>
-                  <Label>Full Name</Label>
-                  <Input 
-                    type="text" 
-                    name="fullName"
-                    value={formData.fullName}
-                    onChange={handleInputChange}
-                    placeholder="Enter your full name" 
-                  />
-                  {errors.fullName && <ErrorMessage>{errors.fullName}</ErrorMessage>}
-                </InputGroup>
-                
-                <InputGroup>
-                  <Label>Contact Number</Label>
-                  <PhoneInputGroup>
-                    <span>+91</span>
-                    <Input 
-                      type="tel" 
-                      name="contactNumber"
-                      value={formData.contactNumber}
-                      onChange={handleInputChange}
-                      placeholder="1234567890" 
-                    />
-                  </PhoneInputGroup>
-                  {errors.contactNumber && <ErrorMessage>{errors.contactNumber}</ErrorMessage>}
-                </InputGroup>
-                
-                <InputGroup>
-                  <Label>Photo Verification</Label>
-                  <FileUploadContainer>
-                    <FileUploadLabel>
-                      <FileInput 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={handleFileChange} 
-                      />
-                      <UploadIcon>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                          <polyline points="17 8 12 3 7 8"></polyline>
-                          <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                      </UploadIcon>
-                      <UploadText>
-                        {photoPreview ? 'Change photo' : 'Upload a photo of the food you wish to donate'}
-                        <br />
-                        <small>Click to browse or drag and drop</small>
-                      </UploadText>
-                    </FileUploadLabel>
-                    {photoPreview && (
-                      <ImagePreviewContainer>
-                        <ImagePreview src={photoPreview} alt="Preview" />
-                      </ImagePreviewContainer>
-                    )}
-                    {errors.photoVerification && <ErrorMessage>{errors.photoVerification}</ErrorMessage>}
-                  </FileUploadContainer>
-                </InputGroup>
-                
-                <InputGroup>
-                  <Label>Delivery Method</Label>
-                  <DeliveryOptions>
-                    <DeliveryOption 
-                      type="button"
-                      selected={deliveryMethod === 'pickup'}
-                      onClick={() => handleDeliveryChange('pickup')}
-                    >
-                      Pickup
-                    </DeliveryOption>
-                    <DeliveryOption
-                      type="button"
-                      selected={deliveryMethod === 'drop'}
-                      onClick={() => handleDeliveryChange('drop')}
-                    >
-                      Drop yourself <span>💝</span>
-                    </DeliveryOption>
-                  </DeliveryOptions>
-                </InputGroup>
-                
-                <InputGroup>
-                  <Label>Pin Code</Label>
-                  <Input 
-                    type="text" 
-                    name="pinCode"
-                    value={formData.pinCode}
-                    onChange={handleInputChange}
-                    placeholder="Enter your pin code" 
-                  />
-                  {errors.pinCode && <ErrorMessage>{errors.pinCode}</ErrorMessage>}
-                </InputGroup>
-                
-                <ButtonGroup>
-                  <CancelButton type="button">Cancel</CancelButton>
-                  <ContinueButton type="submit">Continue</ContinueButton>
-                </ButtonGroup>
-              </Form>
             ) : (
-              <Form onSubmit={handleSubmit}>
-                {deliveryMethod === 'pickup' ? (
-                  <>
+              <>
+                <FormTitle>
+                  {currentStep === 1 && "Your Information"}
+                  {currentStep === 2 && formData.donationType === 'pickup' && "Pickup Details"}
+                  {currentStep === 2 && formData.donationType === 'drop-off' && "Drop-off Details"}
+                  {currentStep === 3 && "Food Item Details"}
+                </FormTitle>
+                
+                {currentStep === 1 ? (
+                  <Form onSubmit={(e) => {
+                    e.preventDefault();
+                    const isValid = validateStep(1);
+                    if (isValid) setCurrentStep(2);
+                  }}>
                     <InputGroup>
-                      <Label>Pin your location on the map</Label>
-                      <MapContainer>
-                        <MapComponent 
-                          center={mapPosition} 
-                          zoom={13} 
-                          style={{ height: '100%', width: '100%' }}
-                        >
-                          <FlyToLocation position={mapPosition} pincode={formData.pinCode} setPosition={setMapPosition} />
-                          <TileLayer
-                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                          />
-                          <Marker position={mapPosition}>
-                            <Popup>
-                              Your pickup location
-                            </Popup>
-                          </Marker>
-                          <MapClickHandler onMapClick={handleMapClick} />
-                        </MapComponent>
-                      </MapContainer>
-                    </InputGroup>
-                    
-                    <InputGroup>
-                      <Label>Address</Label>
-                      <Input 
-                        type="text" 
-                        name="address"
-                        value={formData.address}
-                        onChange={handleInputChange}
-                        placeholder="Enter your full address" 
-                      />
-                      {errors.address && <ErrorMessage>{errors.address}</ErrorMessage>}
-                    </InputGroup>
-                    
-                    <InputGroup>
-                      <Label>Landmark (Optional)</Label>
-                      <Input 
-                        type="text" 
-                        name="landmark"
-                        value={formData.landmark}
-                        onChange={handleInputChange}
-                        placeholder="Any nearby landmark" 
-                      />
-                    </InputGroup>
-                    
-                    <InputGroup>
-                      <Label>City</Label>
-                      <Input 
-                        type="text" 
-                        name="city"
-                        value={formData.city}
-                        onChange={handleInputChange}
-                        placeholder="Enter your city" 
-                      />
-                      {errors.city && <ErrorMessage>{errors.city}</ErrorMessage>}
-                    </InputGroup>
-                    
-                    <InputGroup>
-                      <Label>State</Label>
-                      <Input 
-                        type="text" 
-                        name="state"
-                        value={formData.state}
-                        onChange={handleInputChange}
-                        placeholder="Enter your state" 
-                      />
-                      {errors.state && <ErrorMessage>{errors.state}</ErrorMessage>}
-                    </InputGroup>
-                    
-                    <InputGroup>
-                      <Label>Food Description</Label>
-                      <TextArea
-                        name="items"
-                        value={formData.items}
-                        onChange={handleInputChange}
-                        placeholder="Describe the food you wish to donate (e.g., rice, dal, vegetables, etc.)"
-                      />
-                      {errors.items && <ErrorMessage>{errors.items}</ErrorMessage>}
-                    </InputGroup>
-                    
-                    <InputGroup>
-                      <Label>Additional Notes (Optional)</Label>
-                      <TextArea
-                        name="notes"
-                        value={formData.notes}
-                        onChange={handleInputChange}
-                        placeholder="Any additional information about your donation"
-                      />
-                    </InputGroup>
-                  </>
-                ) : (
-                  <>
-                    <InputGroup>
-                      <Label>Pin Code</Label>
+                      <Label>Full Name</Label>
                       <Input
                         type="text"
-                        name="pinCode"
-                        value={formData.pinCode}
+                        name="name"
+                        value={formData.name}
                         onChange={handleInputChange}
-                        placeholder="Enter your pin code"
+                        placeholder="Enter your full name"
                       />
-                      {errors.pinCode && <ErrorMessage>{errors.pinCode}</ErrorMessage>}
-                      <ButtonGroup style={{ marginTop: '0.5rem' }}>
-                        <ContinueButton 
-                          type="button" 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            if (formData.pinCode) {
-                              findNearbyDropLocations(formData.pinCode);
-                            } else {
-                              setErrors(prev => ({...prev, pinCode: 'Please enter a valid pin code'}));
-                            }
-                          }}
-                          style={{ padding: '0.5rem' }}
+                      {errors.name && <ErrorMessage>{errors.name}</ErrorMessage>}
+                    </InputGroup>
+                    
+                    <InputGroup>
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        placeholder="Enter your email address"
+                      />
+                      {errors.email && <ErrorMessage>{errors.email}</ErrorMessage>}
+                    </InputGroup>
+                    
+                    <InputGroup>
+                      <Label>Phone Number</Label>
+                      <PhoneInputGroup>
+                        <span>+91</span>
+                        <Input
+                          type="tel"
+                          name="phone"
+                          value={formData.phone}
+                          onChange={handleInputChange}
+                          placeholder="Enter your 10-digit phone number"
+                          maxLength={10}
+                        />
+                      </PhoneInputGroup>
+                      {errors.phone && <ErrorMessage>{errors.phone}</ErrorMessage>}
+                    </InputGroup>
+                    
+                    <InputGroup>
+                      <Label>Donation Method</Label>
+                      <DeliveryOptions>
+                        <DeliveryOption
+                          type="button"
+                          selected={formData.donationType === 'pickup'}
+                          onClick={() => handleDeliveryChange('pickup')}
                         >
-                          Find Nearby Drop Locations
-                        </ContinueButton>
-                      </ButtonGroup>
+                          Pickup
+                        </DeliveryOption>
+                        <DeliveryOption
+                          type="button"
+                          selected={formData.donationType === 'drop-off'}
+                          onClick={() => handleDeliveryChange('drop-off')}
+                        >
+                          Drop-off
+                        </DeliveryOption>
+                      </DeliveryOptions>
                     </InputGroup>
                     
+                    <ButtonGroup>
+                      <CancelButton type="button" onClick={() => window.location.href = '/'}>Cancel</CancelButton>
+                      <ContinueButton type="submit">Continue</ContinueButton>
+                    </ButtonGroup>
+                  </Form>
+                ) : currentStep === 2 ? (
+                  <Form onSubmit={handleSubmit}>
+                    {formData.donationType === 'pickup' ? (
+                      <>
+                        <InputGroup>
+                          <Label>Select Your Location on Map</Label>
+                          <MapContainer>
+                            <MapComponent 
+                              position={position}
+                              setPosition={setPosition}
+                              onMapClick={handleMapClick}
+                            />
+                          </MapContainer>
+                          {errors.coordinates && <ErrorMessage>{errors.coordinates}</ErrorMessage>}
+                          {isLoadingLocations && <LoadingMessage>Loading address details...</LoadingMessage>}
+                        </InputGroup>
+                        
+                        <InputGroup>
+                          <Label>Address</Label>
+                          <Input
+                            type="text"
+                            name="address"
+                            value={formData.address}
+                            onChange={handleInputChange}
+                            placeholder="Your street address"
+                          />
+                          {errors.address && <ErrorMessage>{errors.address}</ErrorMessage>}
+                        </InputGroup>
+                        
+                        <InputGroup>
+                          <Label>Landmark</Label>
+                          <Input
+                            type="text"
+                            name="landmark"
+                            value={formData.landmark}
+                            onChange={handleInputChange}
+                            placeholder="Nearby landmark for easy location"
+                          />
+                        </InputGroup>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <InputGroup>
+                            <Label>City</Label>
+                            <Input
+                              type="text"
+                              name="city"
+                              value={formData.city}
+                              onChange={handleInputChange}
+                              placeholder="City"
+                            />
+                            {errors.city && <ErrorMessage>{errors.city}</ErrorMessage>}
+                          </InputGroup>
+                          
+                          <InputGroup>
+                            <Label>State</Label>
+                            <Input
+                              type="text"
+                              name="state"
+                              value={formData.state}
+                              onChange={handleInputChange}
+                              placeholder="State"
+                            />
+                            {errors.state && <ErrorMessage>{errors.state}</ErrorMessage>}
+                          </InputGroup>
+                        </div>
+                        
+                        <InputGroup>
+                          <Label>PIN Code</Label>
+                          <Input
+                            type="text"
+                            name="pinCode"
+                            value={formData.pinCode}
+                            onChange={handleInputChange}
+                            placeholder="6-digit PIN code"
+                          />
+                          {errors.pinCode && <ErrorMessage>{errors.pinCode}</ErrorMessage>}
+                        </InputGroup>
+                        
+                        <InputGroup>
+                          <Label>Additional Notes (Optional)</Label>
+                          <TextArea
+                            name="notes"
+                            value={formData.notes}
+                            onChange={handleInputChange}
+                            placeholder="Any additional information about your donation"
+                          />
+                        </InputGroup>
+                      </>
+                    ) : (
+                      <>
+                        <InputGroup>
+                          <Label>PIN Code</Label>
+                          <Input
+                            type="text"
+                            name="pinCode"
+                            value={formData.pinCode}
+                            onChange={handleInputChange}
+                            placeholder="Enter 6-digit PIN code"
+                            maxLength={6}
+                          />
+                          {errors.pinCode && <ErrorMessage>{errors.pinCode}</ErrorMessage>}
+                        </InputGroup>
+                        
+                        <InputGroup>
+                          <Label>Select a Drop Location</Label>
+                          {dropLocations.length > 0 ? (
+                            <LocationsContainer>
+                              {dropLocations.map(location => (
+                                <LocationCard 
+                                  key={location._id}
+                                  className={formData.dropLocationId === location._id ? 'selected' : ''}
+                                  onClick={() => setFormData(prev => ({...prev, dropLocationId: location._id}))}
+                                >
+                                  <LocationName>{location.name}</LocationName>
+                                  <LocationAddress>{location.address}</LocationAddress>
+                                  <LocationDetail>PIN: {location.pincode}</LocationDetail>
+                                  <LocationDetail>Hours: {location.timings}</LocationDetail>
+                                </LocationCard>
+                              ))}
+                            </LocationsContainer>
+                          ) : (
+                            <NoLocationsMessage>
+                              {isLoadingLocations ? 
+                                'Loading drop locations...' : 
+                                'Enter your pincode to see available drop-off centers.'}
+                            </NoLocationsMessage>
+                          )}
+                          {errors.dropLocationId && <ErrorMessage>{errors.dropLocationId}</ErrorMessage>}
+                        </InputGroup>
+                        
+                        <InputGroup>
+                          <Label>Additional Notes (Optional)</Label>
+                          <TextArea
+                            name="notes"
+                            value={formData.notes}
+                            onChange={handleInputChange}
+                            placeholder="Any additional information about your donation"
+                          />
+                        </InputGroup>
+                      </>
+                    )}
+                    
+                    <ButtonGroup>
+                      <BackButton type="button" onClick={() => setCurrentStep(1)}>Back</BackButton>
+                      <ContinueButton 
+                        type="button" 
+                        onClick={() => {
+                          const isValid = validateStep(2);
+                          if (isValid) setCurrentStep(3);
+                        }}
+                      >
+                        Continue
+                      </ContinueButton>
+                    </ButtonGroup>
+                  </Form>
+                ) : (
+                  <Form onSubmit={handleSubmit}>
                     <InputGroup>
-                      <Label>Select a Drop Location</Label>
-                      {nearbyDropLocations.length > 0 ? (
-                        <LocationsContainer>
-                          {nearbyDropLocations.map(location => (
-                            <LocationCard 
-                              key={location.id}
-                              className={selectedLocationId === location.id ? 'selected' : ''}
-                              onClick={() => handleSelectDropLocation(location.id)}
-                            >
-                              <LocationName>{location.name}</LocationName>
-                              <LocationAddress>{location.address}</LocationAddress>
-                              <LocationTimings>Open: {location.timings}</LocationTimings>
-                            </LocationCard>
-                          ))}
-                        </LocationsContainer>
+                      <Label>Food Items</Label>
+                      {formData.foodItems.length > 0 ? (
+                        formData.foodItems.map(item => (
+                          <ItemCard key={item.id}>
+                            <ItemName>{item.name}</ItemName>
+                            <ItemQuantity>{item.quantity}</ItemQuantity>
+                            <ItemUnit>{item.unit}</ItemUnit>
+                            <DeleteButton onClick={() => removeFoodItem(item.id)}>
+                              <FaTrash />
+                            </DeleteButton>
+                          </ItemCard>
+                        ))
                       ) : (
-                        <NoLocationsMessage>
-                          {showingDropLocations ? 
-                            'No drop locations found near your pincode. Please try a different pincode.' : 
-                            'Enter your pincode and click "Find Nearby Drop Locations" to see available drop-off centers.'}
-                        </NoLocationsMessage>
+                        <div style={{ 
+                          textAlign: 'center', 
+                          padding: '30px', 
+                          background: '#f9f9f9', 
+                          borderRadius: '12px',
+                          marginBottom: '20px'
+                        }}>
+                          <p style={{ color: '#666', marginBottom: '15px' }}>No food items added yet</p>
+                          <p style={{ color: '#888', fontSize: '0.9rem' }}>Click the button below to add your first item</p>
+                        </div>
                       )}
-                      {errors.selectedDropLocation && <ErrorMessage>{errors.selectedDropLocation}</ErrorMessage>}
-                    </InputGroup>
-                    
-                    <InputGroup>
-                      <Label>Food Description</Label>
-                      <TextArea
-                        name="items"
-                        value={formData.items}
-                        onChange={handleInputChange}
-                        placeholder="Describe the food you wish to donate (e.g., rice, dal, vegetables, etc.)"
-                      />
-                      {errors.items && <ErrorMessage>{errors.items}</ErrorMessage>}
+                      
+                      <AddItemButton type="button" onClick={addFoodItem}>
+                        <FaPlus size={16} /> Add Food Item
+                      </AddItemButton>
+                      
+                      {errors.foodItems && <ErrorMessage>{errors.foodItems}</ErrorMessage>}
                     </InputGroup>
                     
                     <InputGroup>
@@ -1218,20 +1582,77 @@ const DonationForm = () => {
                         placeholder="Any additional information about your donation"
                       />
                     </InputGroup>
-                  </>
+                    
+                    <ButtonGroup>
+                      <BackButton type="button" onClick={() => setCurrentStep(2)}>Back</BackButton>
+                      <SubmitButton type="submit" isSubmitting={isSubmitting}>Submit</SubmitButton>
+                    </ButtonGroup>
+                    
+                    {/* Food Item Modal */}
+                    {showFoodItemModal && (
+                      <Modal>
+                        <ModalContent>
+                          <ModalTitle>{editingFoodItemId ? 'Edit Food Item' : 'Add Food Item'}</ModalTitle>
+                          
+                          <InputGroup>
+                            <Label>Food Item Name</Label>
+                            <Input
+                              type="text"
+                              name="name"
+                              value={newFoodItem.name}
+                              onChange={handleFoodItemChange}
+                              placeholder="e.g., Rice, Dal, Chapati"
+                            />
+                          </InputGroup>
+                          
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            <InputGroup>
+                              <Label>Quantity</Label>
+                              <Input
+                                type="number"
+                                name="quantity"
+                                min="0"
+                                value={newFoodItem.quantity}
+                                onChange={handleFoodItemChange}
+                                placeholder="Amount"
+                              />
+                            </InputGroup>
+                            
+                            <InputGroup>
+                              <Label>Unit</Label>
+                              <Select
+                                name="unit"
+                                value={newFoodItem.unit}
+                                onChange={handleFoodItemChange}
+                              >
+                                <option value="units">Units</option>
+                                <option value="kg">Kg</option>
+                                <option value="liters">Liters</option>
+                                <option value="packets">Packets</option>
+                              </Select>
+                            </InputGroup>
+                          </div>
+                          
+                          <ModalButtons>
+                            <CancelModalButton type="button" onClick={() => setShowFoodItemModal(false)}>
+                              Cancel
+                            </CancelModalButton>
+                            <SaveModalButton type="button" onClick={saveFoodItem}>
+                              Save
+                            </SaveModalButton>
+                          </ModalButtons>
+                        </ModalContent>
+                      </Modal>
+                    )}
+                  </Form>
                 )}
-                
-                <ButtonGroup>
-                  <BackButton type="button" onClick={() => setCurrentStep(1)}>Back</BackButton>
-                  <SubmitButton type="submit">Submit</SubmitButton>
-                </ButtonGroup>
-              </Form>
+              </>
             )}
           </FormSection>
         </Card>
       </Container>
     </PageWrapper>
   );
-};
+}
 
 export default DonationForm;

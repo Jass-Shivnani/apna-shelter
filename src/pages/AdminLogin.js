@@ -1,85 +1,9 @@
-import React, { useState } from 'react';
-import styled from 'styled-components';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Navbar from '../components/Navbar';
-
-const PageWrapper = styled.div`
-  min-height: 100vh;
-  background-color: #FFF4E0;
-`;
-
-const Container = styled.div`
-  max-width: 500px;
-  margin: 4rem auto;
-  padding: 0 2rem;
-`;
-
-const Card = styled.div`
-  background: white;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  padding: 2rem;
-`;
-
-const FormTitle = styled.h2`
-  font-size: 2rem;
-  color: #344767;
-  margin-bottom: 2rem;
-  font-family: 'Roboto', sans-serif;
-  text-align: center;
-`;
-
-const Form = styled.form`
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-`;
-
-const InputGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
-
-const Label = styled.label`
-  font-size: 0.9rem;
-  color: #666;
-`;
-
-const Input = styled.input`
-  padding: 0.8rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 1rem;
-  
-  &:focus {
-    outline: none;
-    border-color: #007DBC;
-  }
-`;
-
-const Button = styled.button`
-  padding: 0.8rem;
-  border-radius: 4px;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  background: #003669;
-  border: none;
-  color: white;
-  margin-top: 1rem;
-  
-  &:hover {
-    background: #002850;
-  }
-`;
-
-const ErrorMessage = styled.p`
-  color: #e74c3c;
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
-`;
+import styled from 'styled-components';
+import { FaUser, FaLock } from 'react-icons/fa';
+import AdminNavbar from '../components/AdminNavbar';
+import { authService } from '../services/api';
 
 const AdminLogin = () => {
   const [formData, setFormData] = useState({
@@ -87,79 +11,201 @@ const AdminLogin = () => {
     password: ''
   });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Clear error when user starts typing
-    if (error) {
-      setError('');
+  // Check if already logged in
+  useEffect(() => {
+    const token = authService.getToken();
+    if (token) {
+      navigate('/admin');
     }
+  }, [navigate]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Simple validation
-    if (!formData.username.trim() || !formData.password.trim()) {
-      setError('Please enter both username and password');
-      return;
-    }
-    
-    // For demo purposes, we'll use a hardcoded admin credential
-    // In a real app, this would be an API call to validate credentials
-    if (formData.username === 'admin' && formData.password === 'admin123') {
-      // Store authentication in localStorage (in a real app, use a proper auth token)
-      localStorage.setItem('adminAuthenticated', 'true');
-      // Redirect to admin dashboard
-      navigate('/admin/dashboard');
-    } else {
-      setError('Invalid username or password');
+    setLoading(true);
+    setError('');
+
+    try {
+      console.log('Attempting login with:', formData);
+      
+      // Use authService for login
+      const result = await authService.login(formData);
+      
+      if (result.success) {
+        // Check if user has admin, manager, or volunteer role
+        if (result.user && (result.user.role === 'admin' || result.user.role === 'manager' || result.user.role === 'volunteer')) {
+          console.log(`${result.user.role} login successful`);
+          
+          // Store the current user in localStorage
+          localStorage.setItem('currentUser', JSON.stringify(result.user));
+          
+          navigate('/admin');
+        } else {
+          console.log('User role is not authorized:', result.user?.role);
+          setError('You do not have admin, manager, or volunteer privileges');
+          // Clear any token if the user is not authorized
+          authService.setToken(null);
+        }
+      } else {
+        console.log('Login failed:', result.message);
+        setError(result.message || 'Invalid credentials');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('An error occurred during login. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <PageWrapper>
-      <Navbar />
-      <Container>
-        <Card>
-          <FormTitle>Admin Login</FormTitle>
-          <Form onSubmit={handleSubmit}>
-            <InputGroup>
-              <Label>Username</Label>
-              <Input 
-                type="text" 
-                name="username"
-                value={formData.username}
-                onChange={handleInputChange}
-                placeholder="Enter your username" 
-              />
-            </InputGroup>
-            
-            <InputGroup>
-              <Label>Password</Label>
-              <Input 
-                type="password" 
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                placeholder="Enter your password" 
-              />
-            </InputGroup>
-            
-            {error && <ErrorMessage>{error}</ErrorMessage>}
-            
-            <Button type="submit">Login</Button>
-          </Form>
-        </Card>
-      </Container>
-    </PageWrapper>
+    <>
+      <AdminNavbar />
+      <LoginContainer>
+        <LoginForm onSubmit={handleSubmit}>
+          <Title>Login</Title>
+          
+          {error && <ErrorMessage>{error}</ErrorMessage>}
+          
+          <InputGroup>
+            <InputIcon>
+              <FaUser />
+            </InputIcon>
+            <Input
+              type="text"
+              name="username"
+              placeholder="Username"
+              value={formData.username}
+              onChange={handleChange}
+              required
+            />
+          </InputGroup>
+          
+          <InputGroup>
+            <InputIcon>
+              <FaLock />
+            </InputIcon>
+            <Input
+              type="password"
+              name="password"
+              placeholder="Password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+            />
+          </InputGroup>
+          
+          <LoginButton type="submit" disabled={loading}>
+            {loading ? 'Logging in...' : 'Login'}
+          </LoginButton>
+          
+          <HelpText>
+            Demo: admin / admin123, manager / manager123, volunteer / volunteer123
+          </HelpText>
+        </LoginForm>
+      </LoginContainer>
+    </>
   );
 };
+
+// Styled Components
+const LoginContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 140px); /* Adjusted for navbar */
+  background-color: #f5f5f5;
+  padding: 2rem;
+`;
+
+const LoginForm = styled.form`
+  width: 100%;
+  max-width: 400px;
+  padding: 2rem;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+const Title = styled.h1`
+  font-size: 1.75rem;
+  color: #344767;
+  margin: 0 0 1.5rem 0;
+  text-align: center;
+`;
+
+const InputGroup = styled.div`
+  position: relative;
+  margin-bottom: 1.5rem;
+`;
+
+const InputIcon = styled.div`
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #adb5bd;
+`;
+
+const Input = styled.input`
+  width: 100%;
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 1rem;
+  
+  &:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.25);
+  }
+`;
+
+const LoginButton = styled.button`
+  width: 100%;
+  padding: 0.75rem;
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  
+  &:hover {
+    background-color: #3a80d2;
+  }
+  
+  &:disabled {
+    background-color: #adb5bd;
+    cursor: not-allowed;
+  }
+`;
+
+const ErrorMessage = styled.div`
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+`;
+
+const HelpText = styled.p`
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  color: #6c757d;
+`;
 
 export default AdminLogin;
